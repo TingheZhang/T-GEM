@@ -37,10 +37,10 @@ dropout_rate = 0.3
 n_epochs = 50
 batch_size = 16
 n_head = np.int(sys.argv[1])
-gain=np.int(sys.argv[2])
-lr_rate=np.double(sys.argv[3])
+lr_rate=np.double(sys.argv[2])
 # rand_state=np.int(sys.argv[4])
-act_fun=sys.argv[4]
+act_fun=sys.argv[3]
+gain=1
 
 lr_rate=0.0001
 rand_state=52
@@ -71,8 +71,8 @@ class mulitiattention(torch.nn.Module):
         self.WQ = nn.Parameter(torch.Tensor(self.n_head, n_feature, 1), requires_grad=True)
         self.WK = nn.Parameter(torch.Tensor(self.n_head,n_feature,1),requires_grad=True)
         self.WV = nn.Parameter(torch.Tensor(self.n_head,n_feature,1),requires_grad=True)
-        torch.nn.init.xavier_normal_(self.WQ,gain=gain)
-        torch.nn.init.xavier_normal_(self.WK,gain=gain)
+        torch.nn.init.xavier_normal_(self.WQ,gain=1)
+        torch.nn.init.xavier_normal_(self.WK,gain=1)
 
         torch.nn.init.xavier_normal_(self.WV)
         self.W_0=nn.Parameter(torch.Tensor(self.n_head*[0.001]),requires_grad=True)
