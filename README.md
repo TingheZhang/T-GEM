@@ -19,6 +19,8 @@ The following package is necessary for our project: pytorch=1.9.0, captum=0.4.0,
 ## 2 train the model 
 G-TEM_pytorch_3l_34.py is the model that has the best performance for our cancer prediction task. The code can sinply run by :
 > python G-TEM_pytorch_3l_34.py 5 0.001 relu 
+
+
 which 5 is the number of head for each attention layer, 0.001 is the learning rate, relu is the activation function used for last attention layer. (you can choose the actvation form relu, leakyrelu,gelu or nan where nan means not using any activation function.)
 
 
@@ -27,8 +29,12 @@ Model structure can be changed on line 193~ line 208.
 To evaluate which gene is more important to predicte specific cancer, we use integer gradient(IG) to compute the attribution score for each test samples. The larger score means more importance. 
 To compute the attribution score, it can be easily got by:
 > python G-TEM_t_attr_allcancer.py ig 
-The matched parameter need to be adjust for different project at line 35 ~ line 51. 
+The matched parameter need to be adjust for different project at line 35 ~ line 51. Notice, the model structure in G-TEM_t_attr_allcancer.py has to match the structure at G-TEM_pytorch_3l_34.py . 
 
-## 4
+
+Gene symbol and its attribution score can be got for each cancer after running the program. 
+## 4 compute and visulize the attention weights and entropy for each attention layers
+
+
 
 
