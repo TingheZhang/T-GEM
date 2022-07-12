@@ -25,6 +25,8 @@ which 5 is the number of head for each attention layer, 0.001 is the learning ra
 
 
 Model structure can be changed on line 193~ line 208. 
+
+Our input file can be downloaded from [here](https://drive.google.com/file/d/13-Xjqexsi8-ZkZm17vcH6oGIivL2O8XW/view?usp=sharing)
 ## 3. Compute the attribution score 
 To evaluate which gene is more important to predicte specific cancer, we use integer gradient(IG) to compute the attribution score for each test samples. The larger score means more importance. 
 To compute the attribution score, it can be easily got by:
