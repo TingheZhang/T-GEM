@@ -363,10 +363,10 @@ if __name__ == '__main__':
 		torch.set_grad_enabled(True)
 
 		logits = model(X_var)
-		logits = logits.gather(1, y.view(-1, 1)).squeeze()  # 得到正确分类
-		logits.backward(torch.FloatTensor([1.0]*logits.shape[0]).to(device))  # 只计算正确分类部分的loss
+		logits = logits.gather(1, y.view(-1, 1)).squeeze()  
+		logits.backward(torch.FloatTensor([1.0]*logits.shape[0]).to(device)) 
 
-		saliency = abs(X_var.grad.data)  # 返回X的梯度绝对值大小
+		saliency = abs(X_var.grad.data) 
 		return saliency.squeeze()
 
 
@@ -757,7 +757,7 @@ if __name__ == '__main__':
 
 		softmax_entropy=pl.load(open("./model_res_vis_all/softmax_entropy_3l_product.plk","rb"))
 
-		test_layer_entropy1_all=softmax_entropy['test_layer_entropy1_all']# test_layer_entropy1_all and test_softmax_p_1_entropy_all are same ??? may delete one of them
+		test_layer_entropy1_all=softmax_entropy['test_layer_entropy1_all']
 		test_layer_entropy2_all=softmax_entropy['test_layer_entropy2_all']
 		test_layer_entropy3_all=softmax_entropy['test_layer_entropy3_all']
 		test_softmax_p_1_avg_all=softmax_entropy['test_softmax_p_1_avg_all']
