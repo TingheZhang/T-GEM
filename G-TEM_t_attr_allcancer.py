@@ -28,7 +28,8 @@ from sklearn import svm,metrics
 from sklearn.metrics import accuracy_score,f1_score
 import seaborn
 import glob
-###########comment this if you are using CPU
+###########change the number to your GPU ID
+########### if you are using CPU， then delete this number
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 ##################
 print(sys.argv)
