@@ -15,6 +15,8 @@ you can simply install the necessary dependacy by using command
 you can set your enviroment names by change the first line of the transformer.yml . Details can be found at [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-from-an-environment-yml-file)
 
 The following package is necessary for our project: pytorch=1.9.0, captum=0.4.0,python=3.9
+After enviroment setup, use following command to activate this enviroments:
+ > conda activate transformers
 
 ## 2. Train the model 
 G-TEM_pytorch_3l_34.py is the model that has the best performance for our cancer prediction task. The code can sinply run by :
