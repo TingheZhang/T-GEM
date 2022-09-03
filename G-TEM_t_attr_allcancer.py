@@ -315,494 +315,478 @@ if __name__ == '__main__':
 	y_train_input=torch.from_numpy(np.hstack(y_train))
 	y_test_input=torch.from_numpy(np.hstack(y_test))
 
-	loop_files=glob.glob('./model_res/pytorch_transformer_*loop*')
-	loop_index=[]
-	for loop_file in loop_files:
-		loop_index.append(loop_file.split('loop_')[1].split('.')[0])
+	file = 'your trained model'
+	print(file)
 
-	for loop in loop_index:
-		res_val_acc_max_index = 0
-		for epoch in range(50):
+	model = torch.load(file[0])
 
-			res_file = glob.glob(
-				'./model_res/pytorch_transformer_head_*loop_'+loop + '*')
-			res_val = pl.load(open(res_file[0], 'rb'))
-			res_val_acc = res_val['acc']
-			res_val_acc_max_index = res_val_acc.index(max(res_val_acc))
-
-		file = glob.glob(
-			'./model_test/pytorch_transformer_head*_3l_*_epoch*')
-		print(file)
-
-		model = torch.load(file[0])
-
-		optimizer = torch.optim.Adam(model.parameters(), lr=lr_rate, betas=(0.9, 0.999), eps=1e-08,
-									 weight_decay=0, amsgrad=False)  ## val acc 98.75
-
-		train_loss_list = []
-		val_loss_list = []
-		res = {}
-		confusion_matrix_res = []
-		mcc_res = []
-		acc_res = []
-		auc_res = []
-		f1_res = []
-
-		permutation_val = torch.randperm(X_val_input.size()[0])
-
-		correct_val = 0
-		val_loss = 0
-
-		model.eval()
-		with torch.no_grad():
-			batch_pred = []
-			batch_y_val_list = []
-			batch_pred_cate = []
-			for batch_idx_val, i in enumerate(range(0, X_val_input.size()[0], batch_size)):
-
-				indices_val = permutation_val[i:i + batch_size]
-				batch_x_val, batch_y_val = X_val_input[indices_val], y_val_input[indices_val]
-
-				batch_x_val, batch_y_val = batch_x_val.to(device), batch_y_val.to(device)
-
-				output_val = model(batch_x_val.float())
-				val_loss += F.nll_loss(output_val, batch_y_val, reduction='sum')
-				pred_val = output_val.argmax(dim=1, keepdim=True)
-
-				correct_val += pred_val.eq(batch_y_val.view_as(pred_val)).sum().item()
-				batch_pred.append(pred_val.cpu().data.numpy())
-				batch_y_val_list.append(batch_y_val.cpu().data.numpy())
-				batch_pred_cate.append(output_val.cpu().data.numpy())
-
-			val_loss /= len(X_val_input)
-
-			val_loss_list.append(val_loss)
-
-			print('\nval set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
-				val_loss, correct_val, len(X_val_input),
-				100. * correct_val / len(X_val_input)))
-
-			yy_val = np.hstack(batch_y_val_list).reshape(-1, 1)
-			ppred_classes = np.vstack(batch_pred)
-
-			acc_val = accuracy_score(yy_val, ppred_classes)
-			f1 = f1_score(yy_val, ppred_classes, average='micro')
-
-			confusion_mat_val = metrics.confusion_matrix(yy_val, ppred_classes)
-			mcc_val = metrics.matthews_corrcoef(yy_val, ppred_classes)
-
-			encoder_ = LabelBinarizer()
-			yy_val_ = encoder_.fit_transform(yy_val)
-			roc_auc_val = metrics.roc_auc_score(yy_val_, np.exp(np.vstack(batch_pred_cate)), multi_class='ovr',
-											average='micro')
-
-		test_loss = 0
-		correct = 0
-		permutation_test = torch.randperm(X_test_input.size()[0])
-		with torch.no_grad():
-			for batch_idx, i in enumerate(range(0, X_test_input.size()[0], batch_size)):
-				indices = permutation_test[i:i + batch_size]
-				batch_x_test, batch_y_test = X_test_input[indices], y_test_input[indices]
-				batch_x_test, batch_y_test = batch_x_test.to(device), batch_y_test.to(device)
-				output_test = model(batch_x_test.float())
-
-				test_loss += F.nll_loss(output_test, batch_y_test, reduction='sum')
-
-				pred = output_test.argmax(dim=1, keepdim=True)
-
-				correct += pred.eq(batch_y_test.view_as(pred)).sum().item()
-
-		test_loss /= len(X_test_input)
-		acc_test = correct / len(X_test_input)
-
-		print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
-			test_loss, correct, len(X_test_input),
-			100. * correct / len(X_test_input)))
-
-		attr_ig_ave_acc_mean_list = []
-		attr_ig_med_acc_mean_list = []
-		attr_ig_ave_acc_mean_list_10 = []
-		attr_ig_med_acc_mean_list_10 = []
-		attr_ig_ave_acc_mean_score_list = []
-		attr_ig_med_acc_mean_score_list = []
-		attr_ig_ave_acc_mean_score_list_10 = []
-		attr_ig_med_acc_mean_score_list_10 = []
-		for cancer_type in range(34):
-			precision_val = confusion_mat_val[cancer_type, cancer_type] / sum(confusion_mat_val[cancer_type, :])
-
-			if attr_method == 'ig':
-				from captum.attr import IntegratedGradients
-
-				torch.manual_seed(123)
-				np.random.seed(123)
-				model.eval()
-				ig = IntegratedGradients(model, multiply_by_inputs=True)
-
-				permutation = torch.randperm(torch.from_numpy(X_val[cancer_type]).size()[0])
-
-				n_correct, n_total = 0, 0
-				attributions_list = []
-				for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[cancer_type]).size()[0], 1)):
-					indices = permutation[i:i + 1]
-					batch_x, batch_y = torch.from_numpy(X_val[cancer_type])[indices], \
-									   torch.from_numpy(y_val[cancer_type])[indices]
-					batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-					attributions, approximation_error = ig.attribute(batch_x, target=batch_y,
-																	 return_convergence_delta=True, baselines=0)
-					attributions_list.append(attributions)
-
-				attributions_array = torch.cat(attributions_list).detach().cpu().numpy()
-
-				attributions_array_ave = np.mean(attributions_array, axis=0)
-				attributions_array_med = np.median(attributions_array, axis=0)
-
-				attr_ig_ave_sort_index = attributions_array_ave.argsort()[::-1]  # index from large to small
-				attr_ig_ave_acc_list = []
-
-				for percent in np.linspace(0.005, 0.05, 10):
-					attr_ig_ave_acc_list.append(
-						precision_val - np.array(
-							get_percent_acc(attr_ig_ave_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
-
-				attr_ig_ave_acc_mean = np.mean(attr_ig_ave_acc_list)
-
-				attr_ig_med_sort_index = attributions_array_med.argsort()[::-1]  # index from large to small
-				attr_ig_med_acc_list = []
-
-				for percent in np.linspace(0.005, 0.05, 10):
-					attr_ig_med_acc_list.append(
-						precision_val - np.array(
-							get_percent_acc(attr_ig_med_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
-				attr_ig_med_acc_mean = np.mean(attr_ig_med_acc_list)
-
-				csvfile = open('attr_34cancer/' + str(cancer_type) + '/result_l3_ig.csv', 'at',
-							   newline='')  # encoding='utf-8'
-				writer = csv.writer(csvfile, delimiter=",")
-				writer.writerow([file, acc_val, acc_test, attr_ig_ave_acc_mean, attr_ig_med_acc_mean,
-								 attr_ig_ave_acc_mean + precision_val, attr_ig_med_acc_mean + precision_val,
-								 np.array(attr_ig_ave_acc_list), np.array(attr_ig_med_acc_list)])
-				csvfile.close()
-
-				attr_ig_ave_acc_mean_list.append(attr_ig_ave_acc_mean)
-				attr_ig_ave_acc_mean_score_list.append(attr_ig_ave_acc_mean + precision_val)
-				attr_ig_med_acc_mean_list.append(attr_ig_ave_acc_mean)
-				attr_ig_med_acc_mean_score_list.append(attr_ig_med_acc_mean + precision_val)
-
-				# use 10% to test the abliation result
-				attr_ig_ave_sort_index = attributions_array_ave.argsort()[::-1]  # index from large to small
-				attr_ig_ave_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_ig_ave_acc_list.append(
-						precision_val - np.array(
-							get_percent_acc(attr_ig_ave_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
-
-				attr_ig_ave_acc_mean = np.mean(attr_ig_ave_acc_list)
-
-				attr_ig_med_sort_index = attributions_array_med.argsort()[::-1]  # index from large to small
-				attr_ig_med_acc_list = []
-				# np.linspace(0.005, 0.05, 10)
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_ig_med_acc_list.append(
-						precision_val - np.array(
-							get_percent_acc(attr_ig_med_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
-				attr_ig_med_acc_mean = np.mean(attr_ig_med_acc_list)
-
-				csvfile = open('attr_34cancer/' + str(cancer_type) + '/result_l3_ig_10.csv', 'at',
-							   newline='')  # encoding='utf-8'
-				writer = csv.writer(csvfile, delimiter=",")
-				writer.writerow([file, acc_val, acc_test, attr_ig_ave_acc_mean, attr_ig_med_acc_mean,
-								 attr_ig_ave_acc_mean + precision_val, attr_ig_med_acc_mean + precision_val,
-								 np.array(attr_ig_ave_acc_list), np.array(attr_ig_med_acc_list)])
-				csvfile.close()
-
-				attr_ig_ave_acc_mean_list_10.append(attr_ig_ave_acc_mean)
-				attr_ig_ave_acc_mean_score_list_10.append(attr_ig_ave_acc_mean + precision_val)
-				attr_ig_med_acc_mean_list_10.append(attr_ig_ave_acc_mean)
-				attr_ig_med_acc_mean_score_list_10.append(attr_ig_med_acc_mean + precision_val)
-
-				# save the rank to GSEA fromat
-				attr_ig_ave_sort_index = attributions_array_ave.argsort()[::-1]  # index from large to small
-				attr_ig_ave_sort_gene = np.array(gene_list)[attr_ig_ave_sort_index]
-				attr_ig_ave_sort_attr = attributions_array_ave[attr_ig_ave_sort_index]
-				np.savetxt(
-					'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_ave_' + attr_method + '.txt',
-					attr_ig_ave_sort_gene, fmt='%s')
-				np.savetxt(
-					'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_ave_' + attr_method + '.rnk',
-					np.vstack((attr_ig_ave_sort_gene, attr_ig_ave_sort_attr)).T, fmt='%s', delimiter='\t')
-
-				attr_ig_med_sort_index = attributions_array_med.argsort()[::-1]  # index from large to small
-				attr_ig_med_sort_gene = np.array(gene_list)[attr_ig_med_sort_index]
-				np.savetxt(
-					'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_med_' + attr_method + '.txt',
-					attr_ig_med_sort_gene, fmt='%s')
-				attr_ig_med_sort_attr = attributions_array_med[attr_ig_med_sort_index]
-				np.savetxt(
-					'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_med_' + attr_method + '.rnk',
-					np.vstack((attr_ig_med_sort_gene, attr_ig_med_sort_attr)).T, fmt='%s', delimiter='\t')
-				# use the absulote value
-				attr_ig_ave_sort_index_abs = abs(attributions_array_ave).argsort()[::-1]  # index from large to small
-				attr_ig_ave_sort_gene_abs = np.array(gene_list)[attr_ig_ave_sort_index_abs]
-				attr_ig_ave_sort_attr_abs = abs(attributions_array_ave)[attr_ig_ave_sort_index_abs]
-				np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
-																				11:-6] + '_ave_' + attr_method + '_abs.txt',
-						   attr_ig_ave_sort_gene_abs, fmt='%s')
-				np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
-																				11:-6] + '_ave_' + attr_method + '_abs.rnk',
-						   np.vstack((attr_ig_ave_sort_gene_abs, attr_ig_ave_sort_attr_abs)).T, fmt='%s',
-						   delimiter='\t')
-
-				attr_ig_med_sort_index_abs = abs(attributions_array_med).argsort()[::-1]  # index from large to small
-				attr_ig_med_sort_gene_abs = np.array(gene_list)[attr_ig_med_sort_index_abs]
-				np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
-																				11:-6] + '_med_' + attr_method + '_abs.txt',
-						   attr_ig_med_sort_gene_abs, fmt='%s')
-				attr_ig_med_sort_attr_abs = abs(attributions_array_med)[attr_ig_med_sort_index_abs]
-				np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
-																				11:-6] + '_med_' + attr_method + '_abs.rnk',
-						   np.vstack((attr_ig_med_sort_gene_abs, attr_ig_med_sort_attr_abs)).T, fmt='%s',
-						   delimiter='\t')
-
-			if attr_method == 'sg_ig':
-				from captum.attr import NoiseTunnel, IntegratedGradients, LayerConductance
-
-				torch.manual_seed(123)
-				np.random.seed(123)
-				model.eval()
-				ig = IntegratedGradients(model, multiply_by_inputs=True)
-				nt = NoiseTunnel(ig)
-
-				permutation = torch.randperm(torch.from_numpy(X_val[0]).size()[0])
-
-				n_correct, n_total = 0, 0
-				attributions_list = []
-				for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[0]).size()[0], 1)):
-					indices = permutation[i:i + 1]
-					batch_x, batch_y = torch.from_numpy(X_val[0])[indices], \
-									   torch.from_numpy(y_val[0])[indices]
-					batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-					attributions = nt.attribute(batch_x, target=batch_y, nt_type='smoothgrad_sq', baselines=0,
-												stdevs=0.1)
-					attributions_list.append(attributions)
-
-				attributions_sg_array = torch.cat(attributions_list).detach().cpu().numpy()
-
-				attr_vg_sg_ig_ave_acc = np.mean(attributions_sg_array, axis=0)
-				attr_vg_sg_ig_med_acc = np.median(attributions_sg_array, axis=0)
-
-				attr_sg_ig_ave_sort_index = attr_vg_sg_ig_ave_acc.argsort()[::-1]  # index from large to small
-				attr_sg_ig_ave_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_sg_ig_ave_acc_list.append(acc_test - np.array(
-						get_percent_acc(attr_sg_ig_ave_sort_index, X_val[0], y_val[0], percent)))
-				attr_sg_ig_ave_acc_mean = np.mean(attr_sg_ig_ave_acc_list)
-
-				attr_sg_ig_med_sort_index = attr_vg_sg_ig_med_acc.argsort()[::-1]  # index from large to small
-				attr_sg_ig_med_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_sg_ig_med_acc_list.append(acc_test - np.array(
-						get_percent_acc(attr_sg_ig_med_sort_index, X_val[0], y_val[0], percent)))
-				attr_sg_ig_med_acc_mean = np.mean(attr_sg_ig_med_acc_list)
-
-				csvfile = open('result_l3_sg_ig.csv', 'at', newline='')  # encoding='utf-8'
-				writer = csv.writer(csvfile, delimiter=",")
-				writer.writerow([file, acc_val, acc_test, attr_sg_ig_ave_acc_mean, attr_sg_ig_med_acc_mean,
-								 attr_sg_ig_ave_acc_mean + acc_test, attr_sg_ig_med_acc_mean + acc_test,
-								 np.array(attr_sg_ig_ave_acc_list), np.array(attr_sg_ig_med_acc_list)])
-				csvfile.close()
-
-			if attr_method == 'vg_ig':
-				from captum.attr import NoiseTunnel, IntegratedGradients
-
-				torch.manual_seed(123)
-				np.random.seed(123)
-				model.eval()
-				ig = IntegratedGradients(model, multiply_by_inputs=True)
-				nt = NoiseTunnel(ig)
-
-				permutation = torch.randperm(torch.from_numpy(X_test[0]).size()[0])
-
-				n_correct, n_total = 0, 0
-				attributions_list = []
-				for batch_idx, i in enumerate(range(0, torch.from_numpy(X_test[0]).size()[0], 1)):
-					indices = permutation[i:i + 1]
-					batch_x, batch_y = torch.from_numpy(X_test[0])[indices], torch.from_numpy(y_test[0])[indices]
-					batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-					attributions = nt.attribute(batch_x, target=batch_y, nt_type='vargrad', baselines=0, stdevs=0.1)
-					attributions_list.append(attributions)
-
-				attributions_varg_array = torch.cat(attributions_list).detach().cpu().numpy()
-				attributions_varg_array_ave = np.mean(attributions_varg_array, axis=0)
-				attributions_varg_array_med = np.median(attributions_varg_array, axis=0)
-
-				attr_vg_ig_ave_sort_index = attributions_varg_array_ave.argsort()[::-1]  # index from large to small
-				attr_vg_ig_ave_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_vg_ig_ave_acc_list.append(acc_test - np.array(
-						get_percent_acc(attr_vg_ig_ave_sort_index, X_val[0], y_val[0], percent)))
-				attr_vg_ig_ave_acc_mean = np.mean(attr_vg_ig_ave_acc_list)
-
-				attr_vg_ig_med_sort_index = attributions_varg_array_med.argsort()[::-1]  # index from large to small
-				attr_vg_ig_med_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_vg_ig_med_acc_list.append(acc_test - np.array(
-						get_percent_acc(attr_vg_ig_med_sort_index, X_val[0], y_val[0], percent)))
-				attr_vg_ig_med_acc_mean = np.mean(attr_vg_ig_med_acc_list)
-
-				csvfile = open('result_l3_vg_ig.csv', 'at', newline='')  # encoding='utf-8'
-				writer = csv.writer(csvfile, delimiter=",")
-				# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_mean,attr_vg_ig_ave_acc_mean,attr_vg_ig_med_acc_mean,attr_vg_vg_ig_ave_acc_mean,attr_vg_vg_ig_med_acc_mean])
-				writer.writerow([file, acc_val, acc_test, attr_vg_ig_ave_acc_mean, attr_vg_ig_med_acc_mean,
-								 attr_vg_ig_ave_acc_mean + acc_test, attr_vg_ig_med_acc_mean + acc_test,
-								 np.array(attr_vg_ig_ave_acc_list), np.array(attr_vg_ig_med_acc_list)])
-				csvfile.close()
-			# ###GB
-			if attr_method == 'gb':
-				from captum.attr import GuidedBackprop
-
-				torch.manual_seed(123)
-				np.random.seed(123)
-				model.eval()
-				gb = GuidedBackprop(model)
-
-				permutation = torch.randperm(torch.from_numpy(X_val[0]).size()[0])
-				attributions_list = []
-				for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[0]).size()[0], 1)):
-					indices = permutation[i:i + 1]
-					batch_x, batch_y = torch.from_numpy(X_val[0])[indices], torch.from_numpy(y_val[0])[indices]
-					batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-					attributions = gb.attribute(batch_x, target=batch_y)
-					attributions_list.append(attributions)
-
-				guided_gradients_array = torch.cat(attributions_list).detach().cpu().numpy()
-				gradients_array_ave = np.mean(guided_gradients_array, axis=0)
-				gradients_array_med = np.median(guided_gradients_array, axis=0)
-
-				attr_gb_ave_sort_index = gradients_array_ave.argsort()[::-1]  # index from large to small
-				attr_gb_ave_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_gb_ave_acc_list.append(
-						acc_test - np.array(get_percent_acc(attr_gb_ave_sort_index, X_val[0], y_val[0], percent)))
-				attr_gb_ave_acc_mean = np.mean(attr_gb_ave_acc_list)
-
-				attr_gb_med_sort_index = gradients_array_med.argsort()[::-1]  # index from large to small
-				attr_gb_med_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_gb_med_acc_list.append(
-						acc_test - np.array(get_percent_acc(attr_gb_med_sort_index, X_val[0], y_val[0], percent)))
-				attr_gb_med_acc_mean = np.mean(attr_gb_med_acc_list)
-				csvfile = open('result_l3_gb.csv', 'at', newline='')  # encoding='utf-8'
-				writer = csv.writer(csvfile, delimiter=",")
-				writer.writerow([file, acc_val, acc_test, attr_gb_ave_acc_mean, attr_gb_med_acc_mean,
-								 attr_gb_ave_acc_mean + acc_test, attr_gb_med_acc_mean + acc_test,
-								 np.array(attr_gb_ave_acc_list), np.array(attr_gb_med_acc_list)])
-				csvfile.close()
-			# # GB vg
-			if attr_method == 'vg_gb':
-				from captum.attr import GuidedBackprop, NoiseTunnel
-
-				torch.manual_seed(123)
-				np.random.seed(123)
-				model.eval()
-				gb = GuidedBackprop(model)
-				nt = NoiseTunnel(gb)
-
-				permutation = torch.randperm(torch.from_numpy(X_val[0]).size()[0])
-				n_correct, n_total = 0, 0
-				attributions_list = []
-				for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[0]).size()[0], 1)):
-					indices = permutation[i:i + 1]
-					batch_x, batch_y = torch.from_numpy(X_val[0])[indices], torch.from_numpy(y_val[0])[indices]
-					batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-					attributions = nt.attribute(batch_x, target=batch_y, nt_type='vargrad', stdevs=0.1)
-					attributions_list.append(attributions)
-
-				vg_gb_array = torch.cat(attributions_list).detach().cpu().numpy()
-				vg_gb_array_ave = np.mean(vg_gb_array, axis=0)
-				vg_gb_array_med = np.median(vg_gb_array, axis=0)
-
-				attr_vg_gb_ave_sort_index = vg_gb_array_ave.argsort()[::-1]  # index from large to small
-				attr_vg_gb_ave_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_vg_gb_ave_acc_list.append(acc_test - np.array(
-						get_percent_acc(attr_vg_gb_ave_sort_index, X_val[0], y_val[0], percent)))
-				attr_vg_gb_ave_acc_mean = np.mean(attr_vg_gb_ave_acc_list)
-
-				attr_vg_gb_med_sort_index = vg_gb_array_med.argsort()[::-1]  # index from large to small
-				attr_vg_gb_med_acc_list = []
-				for percent in np.linspace(0.01, 0.1, 10):
-					attr_vg_gb_med_acc_list.append(acc_test - np.array(
-						get_percent_acc(attr_vg_gb_med_sort_index, X_val[0], y_val[0], percent)))
-				attr_vg_gb_med_acc_mean = np.mean(attr_vg_gb_med_acc_list)
-				# torch.cuda.empty_cache()
-				csvfile = open('result_l3_vg_gb.csv', 'at', newline='')  # encoding='utf-8'
-				writer = csv.writer(csvfile, delimiter=",")
-				# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_mean,attr_gb_ave_acc_mean,attr_gb_med_acc_mean,attr_vg_gb_ave_acc_mean,attr_vg_gb_med_acc_mean])
-				writer.writerow([file, acc_val, acc_test, attr_vg_gb_ave_acc_mean, attr_vg_gb_med_acc_mean,
-								 attr_vg_gb_ave_acc_mean + acc_test, attr_vg_gb_med_acc_mean + acc_test,
-								 np.array(attr_vg_gb_ave_acc_list), np.array(attr_vg_gb_med_acc_list)])
-				csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_ave.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_list),
-						 'detailed info for each cancer'] + attr_ig_ave_acc_mean_list)
-		csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_med.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_list),
-						 'detailed info for each cancer'] + attr_ig_med_acc_mean_list)
-		csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_ave_score.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_score_list),
-						 'detailed info for each cancer'] + attr_ig_ave_acc_mean_score_list)
-		csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_med_score.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_score_list),
-						 'detailed info for each cancer'] + attr_ig_med_acc_mean_score_list)
-		csvfile.close()
-		# for 10%
-		csvfile = open('result_l3_ig_allcancer_ave_10.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_list_10),
-						 'detailed info for each cancer'] + attr_ig_ave_acc_mean_list_10)
-		csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_med_10.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_list_10),
-						 'detailed info for each cancer'] + attr_ig_med_acc_mean_list_10)
-		csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_ave_score_10.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_score_list_10),
-						 'detailed info for each cancer'] + attr_ig_ave_acc_mean_score_list_10)
-		csvfile.close()
-
-		csvfile = open('result_l3_ig_allcancer_med_score_10.csv', 'at',
-					   newline='')  # encoding='utf-8'
-		writer = csv.writer(csvfile, delimiter=",")
-		# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_score_list_10),
-						 'detailed info for each cancer'] + attr_ig_med_acc_mean_score_list_10)
-		csvfile.close()
+	optimizer = torch.optim.Adam(model.parameters(), lr=lr_rate, betas=(0.9, 0.999), eps=1e-08,
+								 weight_decay=0, amsgrad=False)  ## val acc 98.75
+
+	train_loss_list = []
+	val_loss_list = []
+	res = {}
+	confusion_matrix_res = []
+	mcc_res = []
+	acc_res = []
+	auc_res = []
+	f1_res = []
+
+	permutation_val = torch.randperm(X_val_input.size()[0])
+
+	correct_val = 0
+	val_loss = 0
+
+	model.eval()
+	with torch.no_grad():
+		batch_pred = []
+		batch_y_val_list = []
+		batch_pred_cate = []
+		for batch_idx_val, i in enumerate(range(0, X_val_input.size()[0], batch_size)):
+
+			indices_val = permutation_val[i:i + batch_size]
+			batch_x_val, batch_y_val = X_val_input[indices_val], y_val_input[indices_val]
+
+			batch_x_val, batch_y_val = batch_x_val.to(device), batch_y_val.to(device)
+
+			output_val = model(batch_x_val.float())
+			val_loss += F.nll_loss(output_val, batch_y_val, reduction='sum')
+			pred_val = output_val.argmax(dim=1, keepdim=True)
+
+			correct_val += pred_val.eq(batch_y_val.view_as(pred_val)).sum().item()
+			batch_pred.append(pred_val.cpu().data.numpy())
+			batch_y_val_list.append(batch_y_val.cpu().data.numpy())
+			batch_pred_cate.append(output_val.cpu().data.numpy())
+
+		val_loss /= len(X_val_input)
+
+		val_loss_list.append(val_loss)
+
+		print('\nval set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
+			val_loss, correct_val, len(X_val_input),
+			100. * correct_val / len(X_val_input)))
+
+		yy_val = np.hstack(batch_y_val_list).reshape(-1, 1)
+		ppred_classes = np.vstack(batch_pred)
+
+		acc_val = accuracy_score(yy_val, ppred_classes)
+		f1 = f1_score(yy_val, ppred_classes, average='micro')
+
+		confusion_mat_val = metrics.confusion_matrix(yy_val, ppred_classes)
+		mcc_val = metrics.matthews_corrcoef(yy_val, ppred_classes)
+
+		encoder_ = LabelBinarizer()
+		yy_val_ = encoder_.fit_transform(yy_val)
+		roc_auc_val = metrics.roc_auc_score(yy_val_, np.exp(np.vstack(batch_pred_cate)), multi_class='ovr',
+										average='micro')
+
+	test_loss = 0
+	correct = 0
+	permutation_test = torch.randperm(X_test_input.size()[0])
+	with torch.no_grad():
+		for batch_idx, i in enumerate(range(0, X_test_input.size()[0], batch_size)):
+			indices = permutation_test[i:i + batch_size]
+			batch_x_test, batch_y_test = X_test_input[indices], y_test_input[indices]
+			batch_x_test, batch_y_test = batch_x_test.to(device), batch_y_test.to(device)
+			output_test = model(batch_x_test.float())
+
+			test_loss += F.nll_loss(output_test, batch_y_test, reduction='sum')
+
+			pred = output_test.argmax(dim=1, keepdim=True)
+
+			correct += pred.eq(batch_y_test.view_as(pred)).sum().item()
+
+	test_loss /= len(X_test_input)
+	acc_test = correct / len(X_test_input)
+
+	print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
+		test_loss, correct, len(X_test_input),
+		100. * correct / len(X_test_input)))
+
+	attr_ig_ave_acc_mean_list = []
+	attr_ig_med_acc_mean_list = []
+	attr_ig_ave_acc_mean_list_10 = []
+	attr_ig_med_acc_mean_list_10 = []
+	attr_ig_ave_acc_mean_score_list = []
+	attr_ig_med_acc_mean_score_list = []
+	attr_ig_ave_acc_mean_score_list_10 = []
+	attr_ig_med_acc_mean_score_list_10 = []
+	for cancer_type in range(34):
+		precision_val = confusion_mat_val[cancer_type, cancer_type] / sum(confusion_mat_val[cancer_type, :])
+
+		if attr_method == 'ig':
+			from captum.attr import IntegratedGradients
+
+			torch.manual_seed(123)
+			np.random.seed(123)
+			model.eval()
+			ig = IntegratedGradients(model, multiply_by_inputs=True)
+
+			permutation = torch.randperm(torch.from_numpy(X_val[cancer_type]).size()[0])
+
+			n_correct, n_total = 0, 0
+			attributions_list = []
+			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[cancer_type]).size()[0], 1)):
+				indices = permutation[i:i + 1]
+				batch_x, batch_y = torch.from_numpy(X_val[cancer_type])[indices], \
+								   torch.from_numpy(y_val[cancer_type])[indices]
+				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+				attributions, approximation_error = ig.attribute(batch_x, target=batch_y,
+																 return_convergence_delta=True, baselines=0)
+				attributions_list.append(attributions)
+
+			attributions_array = torch.cat(attributions_list).detach().cpu().numpy()
+
+			attributions_array_ave = np.mean(attributions_array, axis=0)
+			attributions_array_med = np.median(attributions_array, axis=0)
+
+			attr_ig_ave_sort_index = attributions_array_ave.argsort()[::-1]  # index from large to small
+			attr_ig_ave_acc_list = []
+
+			for percent in np.linspace(0.005, 0.05, 10):
+				attr_ig_ave_acc_list.append(
+					precision_val - np.array(
+						get_percent_acc(attr_ig_ave_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
+
+			attr_ig_ave_acc_mean = np.mean(attr_ig_ave_acc_list)
+
+			attr_ig_med_sort_index = attributions_array_med.argsort()[::-1]  # index from large to small
+			attr_ig_med_acc_list = []
+
+			for percent in np.linspace(0.005, 0.05, 10):
+				attr_ig_med_acc_list.append(
+					precision_val - np.array(
+						get_percent_acc(attr_ig_med_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
+			attr_ig_med_acc_mean = np.mean(attr_ig_med_acc_list)
+
+			csvfile = open('attr_34cancer/' + str(cancer_type) + '/result_l3_ig.csv', 'at',
+						   newline='')  # encoding='utf-8'
+			writer = csv.writer(csvfile, delimiter=",")
+			writer.writerow([file, acc_val, acc_test, attr_ig_ave_acc_mean, attr_ig_med_acc_mean,
+							 attr_ig_ave_acc_mean + precision_val, attr_ig_med_acc_mean + precision_val,
+							 np.array(attr_ig_ave_acc_list), np.array(attr_ig_med_acc_list)])
+			csvfile.close()
+
+			attr_ig_ave_acc_mean_list.append(attr_ig_ave_acc_mean)
+			attr_ig_ave_acc_mean_score_list.append(attr_ig_ave_acc_mean + precision_val)
+			attr_ig_med_acc_mean_list.append(attr_ig_ave_acc_mean)
+			attr_ig_med_acc_mean_score_list.append(attr_ig_med_acc_mean + precision_val)
+
+			# use 10% to test the abliation result
+			attr_ig_ave_sort_index = attributions_array_ave.argsort()[::-1]  # index from large to small
+			attr_ig_ave_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_ig_ave_acc_list.append(
+					precision_val - np.array(
+						get_percent_acc(attr_ig_ave_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
+
+			attr_ig_ave_acc_mean = np.mean(attr_ig_ave_acc_list)
+
+			attr_ig_med_sort_index = attributions_array_med.argsort()[::-1]  # index from large to small
+			attr_ig_med_acc_list = []
+			# np.linspace(0.005, 0.05, 10)
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_ig_med_acc_list.append(
+					precision_val - np.array(
+						get_percent_acc(attr_ig_med_sort_index, X_val[cancer_type], y_val[cancer_type], percent)))
+			attr_ig_med_acc_mean = np.mean(attr_ig_med_acc_list)
+
+			csvfile = open('attr_34cancer/' + str(cancer_type) + '/result_l3_ig_10.csv', 'at',
+						   newline='')  # encoding='utf-8'
+			writer = csv.writer(csvfile, delimiter=",")
+			writer.writerow([file, acc_val, acc_test, attr_ig_ave_acc_mean, attr_ig_med_acc_mean,
+							 attr_ig_ave_acc_mean + precision_val, attr_ig_med_acc_mean + precision_val,
+							 np.array(attr_ig_ave_acc_list), np.array(attr_ig_med_acc_list)])
+			csvfile.close()
+
+			attr_ig_ave_acc_mean_list_10.append(attr_ig_ave_acc_mean)
+			attr_ig_ave_acc_mean_score_list_10.append(attr_ig_ave_acc_mean + precision_val)
+			attr_ig_med_acc_mean_list_10.append(attr_ig_ave_acc_mean)
+			attr_ig_med_acc_mean_score_list_10.append(attr_ig_med_acc_mean + precision_val)
+
+			# save the rank to GSEA fromat
+			attr_ig_ave_sort_index = attributions_array_ave.argsort()[::-1]  # index from large to small
+			attr_ig_ave_sort_gene = np.array(gene_list)[attr_ig_ave_sort_index]
+			attr_ig_ave_sort_attr = attributions_array_ave[attr_ig_ave_sort_index]
+			np.savetxt(
+				'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_ave_' + attr_method + '.txt',
+				attr_ig_ave_sort_gene, fmt='%s')
+			np.savetxt(
+				'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_ave_' + attr_method + '.rnk',
+				np.vstack((attr_ig_ave_sort_gene, attr_ig_ave_sort_attr)).T, fmt='%s', delimiter='\t')
+
+			attr_ig_med_sort_index = attributions_array_med.argsort()[::-1]  # index from large to small
+			attr_ig_med_sort_gene = np.array(gene_list)[attr_ig_med_sort_index]
+			np.savetxt(
+				'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_med_' + attr_method + '.txt',
+				attr_ig_med_sort_gene, fmt='%s')
+			attr_ig_med_sort_attr = attributions_array_med[attr_ig_med_sort_index]
+			np.savetxt(
+				'attr_34cancer/GSEA/' + str(cancer_type) + '/' + file[0][10:-6] + '_med_' + attr_method + '.rnk',
+				np.vstack((attr_ig_med_sort_gene, attr_ig_med_sort_attr)).T, fmt='%s', delimiter='\t')
+			# use the absulote value
+			attr_ig_ave_sort_index_abs = abs(attributions_array_ave).argsort()[::-1]  # index from large to small
+			attr_ig_ave_sort_gene_abs = np.array(gene_list)[attr_ig_ave_sort_index_abs]
+			attr_ig_ave_sort_attr_abs = abs(attributions_array_ave)[attr_ig_ave_sort_index_abs]
+			np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
+																			11:-6] + '_ave_' + attr_method + '_abs.txt',
+					   attr_ig_ave_sort_gene_abs, fmt='%s')
+			np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
+																			11:-6] + '_ave_' + attr_method + '_abs.rnk',
+					   np.vstack((attr_ig_ave_sort_gene_abs, attr_ig_ave_sort_attr_abs)).T, fmt='%s',
+					   delimiter='\t')
+
+			attr_ig_med_sort_index_abs = abs(attributions_array_med).argsort()[::-1]  # index from large to small
+			attr_ig_med_sort_gene_abs = np.array(gene_list)[attr_ig_med_sort_index_abs]
+			np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
+																			11:-6] + '_med_' + attr_method + '_abs.txt',
+					   attr_ig_med_sort_gene_abs, fmt='%s')
+			attr_ig_med_sort_attr_abs = abs(attributions_array_med)[attr_ig_med_sort_index_abs]
+			np.savetxt('attr_34cancer/GSEA/abs/' + str(cancer_type) + '/' + file[0][
+																			11:-6] + '_med_' + attr_method + '_abs.rnk',
+					   np.vstack((attr_ig_med_sort_gene_abs, attr_ig_med_sort_attr_abs)).T, fmt='%s',
+					   delimiter='\t')
+
+		if attr_method == 'sg_ig':
+			from captum.attr import NoiseTunnel, IntegratedGradients, LayerConductance
+
+			torch.manual_seed(123)
+			np.random.seed(123)
+			model.eval()
+			ig = IntegratedGradients(model, multiply_by_inputs=True)
+			nt = NoiseTunnel(ig)
+
+			permutation = torch.randperm(torch.from_numpy(X_val[0]).size()[0])
+
+			n_correct, n_total = 0, 0
+			attributions_list = []
+			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[0]).size()[0], 1)):
+				indices = permutation[i:i + 1]
+				batch_x, batch_y = torch.from_numpy(X_val[0])[indices], \
+								   torch.from_numpy(y_val[0])[indices]
+				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+				attributions = nt.attribute(batch_x, target=batch_y, nt_type='smoothgrad_sq', baselines=0,
+											stdevs=0.1)
+				attributions_list.append(attributions)
+
+			attributions_sg_array = torch.cat(attributions_list).detach().cpu().numpy()
+
+			attr_vg_sg_ig_ave_acc = np.mean(attributions_sg_array, axis=0)
+			attr_vg_sg_ig_med_acc = np.median(attributions_sg_array, axis=0)
+
+			attr_sg_ig_ave_sort_index = attr_vg_sg_ig_ave_acc.argsort()[::-1]  # index from large to small
+			attr_sg_ig_ave_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_sg_ig_ave_acc_list.append(acc_test - np.array(
+					get_percent_acc(attr_sg_ig_ave_sort_index, X_val[0], y_val[0], percent)))
+			attr_sg_ig_ave_acc_mean = np.mean(attr_sg_ig_ave_acc_list)
+
+			attr_sg_ig_med_sort_index = attr_vg_sg_ig_med_acc.argsort()[::-1]  # index from large to small
+			attr_sg_ig_med_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_sg_ig_med_acc_list.append(acc_test - np.array(
+					get_percent_acc(attr_sg_ig_med_sort_index, X_val[0], y_val[0], percent)))
+			attr_sg_ig_med_acc_mean = np.mean(attr_sg_ig_med_acc_list)
+
+			csvfile = open('result_l3_sg_ig.csv', 'at', newline='')  # encoding='utf-8'
+			writer = csv.writer(csvfile, delimiter=",")
+			writer.writerow([file, acc_val, acc_test, attr_sg_ig_ave_acc_mean, attr_sg_ig_med_acc_mean,
+							 attr_sg_ig_ave_acc_mean + acc_test, attr_sg_ig_med_acc_mean + acc_test,
+							 np.array(attr_sg_ig_ave_acc_list), np.array(attr_sg_ig_med_acc_list)])
+			csvfile.close()
+
+		if attr_method == 'vg_ig':
+			from captum.attr import NoiseTunnel, IntegratedGradients
+
+			torch.manual_seed(123)
+			np.random.seed(123)
+			model.eval()
+			ig = IntegratedGradients(model, multiply_by_inputs=True)
+			nt = NoiseTunnel(ig)
+
+			permutation = torch.randperm(torch.from_numpy(X_test[0]).size()[0])
+
+			n_correct, n_total = 0, 0
+			attributions_list = []
+			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_test[0]).size()[0], 1)):
+				indices = permutation[i:i + 1]
+				batch_x, batch_y = torch.from_numpy(X_test[0])[indices], torch.from_numpy(y_test[0])[indices]
+				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+				attributions = nt.attribute(batch_x, target=batch_y, nt_type='vargrad', baselines=0, stdevs=0.1)
+				attributions_list.append(attributions)
+
+			attributions_varg_array = torch.cat(attributions_list).detach().cpu().numpy()
+			attributions_varg_array_ave = np.mean(attributions_varg_array, axis=0)
+			attributions_varg_array_med = np.median(attributions_varg_array, axis=0)
+
+			attr_vg_ig_ave_sort_index = attributions_varg_array_ave.argsort()[::-1]  # index from large to small
+			attr_vg_ig_ave_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_vg_ig_ave_acc_list.append(acc_test - np.array(
+					get_percent_acc(attr_vg_ig_ave_sort_index, X_val[0], y_val[0], percent)))
+			attr_vg_ig_ave_acc_mean = np.mean(attr_vg_ig_ave_acc_list)
+
+			attr_vg_ig_med_sort_index = attributions_varg_array_med.argsort()[::-1]  # index from large to small
+			attr_vg_ig_med_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_vg_ig_med_acc_list.append(acc_test - np.array(
+					get_percent_acc(attr_vg_ig_med_sort_index, X_val[0], y_val[0], percent)))
+			attr_vg_ig_med_acc_mean = np.mean(attr_vg_ig_med_acc_list)
+
+			csvfile = open('result_l3_vg_ig.csv', 'at', newline='')  # encoding='utf-8'
+			writer = csv.writer(csvfile, delimiter=",")
+			# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_mean,attr_vg_ig_ave_acc_mean,attr_vg_ig_med_acc_mean,attr_vg_vg_ig_ave_acc_mean,attr_vg_vg_ig_med_acc_mean])
+			writer.writerow([file, acc_val, acc_test, attr_vg_ig_ave_acc_mean, attr_vg_ig_med_acc_mean,
+							 attr_vg_ig_ave_acc_mean + acc_test, attr_vg_ig_med_acc_mean + acc_test,
+							 np.array(attr_vg_ig_ave_acc_list), np.array(attr_vg_ig_med_acc_list)])
+			csvfile.close()
+		# ###GB
+		if attr_method == 'gb':
+			from captum.attr import GuidedBackprop
+
+			torch.manual_seed(123)
+			np.random.seed(123)
+			model.eval()
+			gb = GuidedBackprop(model)
+
+			permutation = torch.randperm(torch.from_numpy(X_val[0]).size()[0])
+			attributions_list = []
+			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[0]).size()[0], 1)):
+				indices = permutation[i:i + 1]
+				batch_x, batch_y = torch.from_numpy(X_val[0])[indices], torch.from_numpy(y_val[0])[indices]
+				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+				attributions = gb.attribute(batch_x, target=batch_y)
+				attributions_list.append(attributions)
+
+			guided_gradients_array = torch.cat(attributions_list).detach().cpu().numpy()
+			gradients_array_ave = np.mean(guided_gradients_array, axis=0)
+			gradients_array_med = np.median(guided_gradients_array, axis=0)
+
+			attr_gb_ave_sort_index = gradients_array_ave.argsort()[::-1]  # index from large to small
+			attr_gb_ave_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_gb_ave_acc_list.append(
+					acc_test - np.array(get_percent_acc(attr_gb_ave_sort_index, X_val[0], y_val[0], percent)))
+			attr_gb_ave_acc_mean = np.mean(attr_gb_ave_acc_list)
+
+			attr_gb_med_sort_index = gradients_array_med.argsort()[::-1]  # index from large to small
+			attr_gb_med_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_gb_med_acc_list.append(
+					acc_test - np.array(get_percent_acc(attr_gb_med_sort_index, X_val[0], y_val[0], percent)))
+			attr_gb_med_acc_mean = np.mean(attr_gb_med_acc_list)
+			csvfile = open('result_l3_gb.csv', 'at', newline='')  # encoding='utf-8'
+			writer = csv.writer(csvfile, delimiter=",")
+			writer.writerow([file, acc_val, acc_test, attr_gb_ave_acc_mean, attr_gb_med_acc_mean,
+							 attr_gb_ave_acc_mean + acc_test, attr_gb_med_acc_mean + acc_test,
+							 np.array(attr_gb_ave_acc_list), np.array(attr_gb_med_acc_list)])
+			csvfile.close()
+		# # GB vg
+		if attr_method == 'vg_gb':
+			from captum.attr import GuidedBackprop, NoiseTunnel
+
+			torch.manual_seed(123)
+			np.random.seed(123)
+			model.eval()
+			gb = GuidedBackprop(model)
+			nt = NoiseTunnel(gb)
+
+			permutation = torch.randperm(torch.from_numpy(X_val[0]).size()[0])
+			n_correct, n_total = 0, 0
+			attributions_list = []
+			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_val[0]).size()[0], 1)):
+				indices = permutation[i:i + 1]
+				batch_x, batch_y = torch.from_numpy(X_val[0])[indices], torch.from_numpy(y_val[0])[indices]
+				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+				attributions = nt.attribute(batch_x, target=batch_y, nt_type='vargrad', stdevs=0.1)
+				attributions_list.append(attributions)
+
+			vg_gb_array = torch.cat(attributions_list).detach().cpu().numpy()
+			vg_gb_array_ave = np.mean(vg_gb_array, axis=0)
+			vg_gb_array_med = np.median(vg_gb_array, axis=0)
+
+			attr_vg_gb_ave_sort_index = vg_gb_array_ave.argsort()[::-1]  # index from large to small
+			attr_vg_gb_ave_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_vg_gb_ave_acc_list.append(acc_test - np.array(
+					get_percent_acc(attr_vg_gb_ave_sort_index, X_val[0], y_val[0], percent)))
+			attr_vg_gb_ave_acc_mean = np.mean(attr_vg_gb_ave_acc_list)
+
+			attr_vg_gb_med_sort_index = vg_gb_array_med.argsort()[::-1]  # index from large to small
+			attr_vg_gb_med_acc_list = []
+			for percent in np.linspace(0.01, 0.1, 10):
+				attr_vg_gb_med_acc_list.append(acc_test - np.array(
+					get_percent_acc(attr_vg_gb_med_sort_index, X_val[0], y_val[0], percent)))
+			attr_vg_gb_med_acc_mean = np.mean(attr_vg_gb_med_acc_list)
+			# torch.cuda.empty_cache()
+			csvfile = open('result_l3_vg_gb.csv', 'at', newline='')  # encoding='utf-8'
+			writer = csv.writer(csvfile, delimiter=",")
+			# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_mean,attr_gb_ave_acc_mean,attr_gb_med_acc_mean,attr_vg_gb_ave_acc_mean,attr_vg_gb_med_acc_mean])
+			writer.writerow([file, acc_val, acc_test, attr_vg_gb_ave_acc_mean, attr_vg_gb_med_acc_mean,
+							 attr_vg_gb_ave_acc_mean + acc_test, attr_vg_gb_med_acc_mean + acc_test,
+							 np.array(attr_vg_gb_ave_acc_list), np.array(attr_vg_gb_med_acc_list)])
+			csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_ave.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_list),
+					 'detailed info for each cancer'] + attr_ig_ave_acc_mean_list)
+	csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_med.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_list),
+					 'detailed info for each cancer'] + attr_ig_med_acc_mean_list)
+	csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_ave_score.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_score_list),
+					 'detailed info for each cancer'] + attr_ig_ave_acc_mean_score_list)
+	csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_med_score.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_score_list),
+					 'detailed info for each cancer'] + attr_ig_med_acc_mean_score_list)
+	csvfile.close()
+	# for 10%
+	csvfile = open('result_l3_ig_allcancer_ave_10.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_list_10),
+					 'detailed info for each cancer'] + attr_ig_ave_acc_mean_list_10)
+	csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_med_10.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_list_10),
+					 'detailed info for each cancer'] + attr_ig_med_acc_mean_list_10)
+	csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_ave_score_10.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_ave_acc_mean_score_list_10),
+					 'detailed info for each cancer'] + attr_ig_ave_acc_mean_score_list_10)
+	csvfile.close()
+
+	csvfile = open('result_l3_ig_allcancer_med_score_10.csv', 'at',
+				   newline='')  # encoding='utf-8'
+	writer = csv.writer(csvfile, delimiter=",")
+	# writer.writerow([file,acc_val,acc_test,attr_ig_ave_acc_mean,attr_ig_med_acc_sum,attr_gb_ave_acc_sum,attr_gb_med_acc_sum,attr_vg_gb_ave_acc_sum,attr_vg_gb_med_acc_sum])
+	writer.writerow([file, acc_val, acc_test, np.sum(attr_ig_med_acc_mean_score_list_10),
+					 'detailed info for each cancer'] + attr_ig_med_acc_mean_score_list_10)
+	csvfile.close()
 
