@@ -651,9 +651,14 @@ if __name__ == '__main__':
 		csvfile = open(args.result_dir + str(cancer_type) + '/result_l3_'+attr_method+'_5.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, attr_ave_acc_mean, attr_med_acc_mean,
-						 attr_ave_acc_mean + precision_, attr_med_acc_mean + precision_,
-						 np.array(attr_ave_acc_list), np.array(attr_med_acc_list)])
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, attr_ave_acc_mean, attr_med_acc_mean,
+							 attr_ave_acc_mean + precision_, attr_med_acc_mean + precision_,
+							 np.array(attr_ave_acc_list), np.array(attr_med_acc_list)])
+		else:
+			writer.writerow([file, acc_test, attr_ave_acc_mean, attr_med_acc_mean,
+							 attr_ave_acc_mean + precision_, attr_med_acc_mean + precision_,
+							 np.array(attr_ave_acc_list), np.array(attr_med_acc_list)])
 		csvfile.close()
 
 		attr_ave_acc_mean_list.append(attr_ave_acc_mean)
@@ -683,9 +688,14 @@ if __name__ == '__main__':
 		csvfile = open(args.result_dir + str(cancer_type) + '/result_l3_'+attr_method+'_10.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, attr_ave_acc_mean, attr_med_acc_mean,
-						 attr_ave_acc_mean + precision_, attr_med_acc_mean + precision_,
-						 np.array(attr_ave_acc_list), np.array(attr_med_acc_list)])
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, attr_ave_acc_mean, attr_med_acc_mean,
+							 attr_ave_acc_mean + precision_, attr_med_acc_mean + precision_,
+							 np.array(attr_ave_acc_list), np.array(attr_med_acc_list)])
+		else:
+			writer.writerow([file,  acc_test, attr_ave_acc_mean, attr_med_acc_mean,
+							 attr_ave_acc_mean + precision_, attr_med_acc_mean + precision_,
+							 np.array(attr_ave_acc_list), np.array(attr_med_acc_list)])
 		csvfile.close()
 
 		attr_ave_acc_mean_list_10.append(attr_ave_acc_mean)
@@ -739,55 +749,87 @@ if __name__ == '__main__':
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_ave.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_list),
-						 'detailed info for each cancer'] + attr_ave_acc_mean_list)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_list),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_list)
+		else:
+			writer.writerow([file, acc_test, np.sum(attr_ave_acc_mean_list),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_list)
 		csvfile.close()
 
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_med.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_list),
-						 'detailed info for each cancer'] + attr_med_acc_mean_list)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_list),
+							 'detailed info for each cancer'] + attr_med_acc_mean_list)
+		else:
+			writer.writerow([file,  acc_test, np.sum(attr_med_acc_mean_list),
+							 'detailed info for each cancer'] + attr_med_acc_mean_list)
 		csvfile.close()
 
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_ave_score.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_score_list),
-						 'detailed info for each cancer'] + attr_ave_acc_mean_score_list)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_score_list),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_score_list)
+		else:
+			writer.writerow([file, acc_test, np.sum(attr_ave_acc_mean_score_list),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_score_list)
 		csvfile.close()
 
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_med_score.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_score_list),
-						 'detailed info for each cancer'] + attr_med_acc_mean_score_list)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_score_list),
+							 'detailed info for each cancer'] + attr_med_acc_mean_score_list)
+		else:
+			writer.writerow([file, acc_test, np.sum(attr_med_acc_mean_score_list),
+							 'detailed info for each cancer'] + attr_med_acc_mean_score_list)
 		csvfile.close()
 		# for 10%
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_ave_10.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_list_10),
-						 'detailed info for each cancer'] + attr_ave_acc_mean_list_10)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_list_10),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_list_10)
+		else:
+			writer.writerow([file,  acc_test, np.sum(attr_ave_acc_mean_list_10),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_list_10)
 		csvfile.close()
 
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_med_10.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_list_10),
-						 'detailed info for each cancer'] + attr_med_acc_mean_list_10)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_list_10),
+							 'detailed info for each cancer'] + attr_med_acc_mean_list_10)
+		else:
+			writer.writerow([file, acc_test, np.sum(attr_med_acc_mean_list_10),
+							 'detailed info for each cancer'] + attr_med_acc_mean_list_10)
 		csvfile.close()
 
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_ave_score_10.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_score_list_10),
-						 'detailed info for each cancer'] + attr_ave_acc_mean_score_list_10)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_ave_acc_mean_score_list_10),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_score_list_10)
+		else:
+			writer.writerow([file,  acc_test, np.sum(attr_ave_acc_mean_score_list_10),
+							 'detailed info for each cancer'] + attr_ave_acc_mean_score_list_10)
 		csvfile.close()
 
 		csvfile = open(args.result_dir+'/result_l3_'+attr_method+'_allcancer_med_score_10.csv', 'at',
 					   newline='')  # encoding='utf-8'
 		writer = csv.writer(csvfile, delimiter=",")
-		writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_score_list_10),
-						 'detailed info for each cancer'] + attr_med_acc_mean_score_list_10)
+		if val==True:
+			writer.writerow([file, acc_val, acc_test, np.sum(attr_med_acc_mean_score_list_10),
+							 'detailed info for each cancer'] + attr_med_acc_mean_score_list_10)
+		else:
+			writer.writerow([file,  acc_test, np.sum(attr_med_acc_mean_score_list_10),
+							 'detailed info for each cancer'] + attr_med_acc_mean_score_list_10)
 		csvfile.close()
