@@ -35,6 +35,7 @@ Notice, the model structure in G-TEM_t_attr_allcancer.py has to match the struct
 
 This code can compute the mean and medain of attribuiton score for the all val/test samples. The attribution score can be used to rank the input importance or do enrichment. We have supportted 6 methods to compute the attribution scores: ig ([Integrated Gradients](https://captum.ai/docs/extension/integrated_gradients)), sg_ig (Integrated Gradients with gaussian noise, [smoothgrad_sq](https://captum.ai/api/noise_tunnel.html)),vg_ig(Integrated Gradients with gaussian noise,vargrad) , gb ([Guided Backprop](https://captum.ai/api/guided_backprop.html)), vg_gb (Guided Backprop with with gaussian noise,vargrad),sg_gb (Guided Backprop with with gaussian noise,smoothgrad_sq). You can change the parameter --attr_method to apply them. 
 
+If you want to compute the attribution for validation data, You can add parameter --do_val. Otherwise it will compute the attribution score for test set.
 
 The input gene importance can be also analyzed by aliblition study. We removed the gene with top attibution score batch by batch and test their affection to accruacy.
 Significant accrucay dropped means these genes are import to predict this type of cancers. 
