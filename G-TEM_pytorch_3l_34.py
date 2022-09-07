@@ -29,27 +29,105 @@ from sklearn.metrics import accuracy_score,f1_score
 import seaborn
 #### comment this if you are not using GPU
 torch.set_num_threads(10)
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 ##########
-print(sys.argv)
+parser = argparse.ArgumentParser()
+
+# Required parameters
+parser.add_argument(
+    "--head_num", default=None, type=int, required=True, help="The number of head for each layers"
+)
+# parser.add_argument(
+#     "--output_dir",
+#     type=str,
+#     required=True,
+#     help="The output directory where the model predictions and checkpoints will be written.",
+# )
+
+# Other parameters
+parser.add_argument(
+    "--learning_rate",
+    default=0.0001,
+    type=float,
+    help="learning rate used for training",
+)
+parser.add_argument(
+    "--dropout_rate",
+    default=0.3,
+    type=float,
+    help="dropout rate used for training",
+)
+
+parser.add_argument(
+    "--act_fun",
+    default='nan',
+    type=str,
+    help="The activation function at the model top layer, can be chosen from relu, leakyrelu, or gelu. Otherwise use nan for no activation function",
+)
+parser.add_argument(
+    "--rand_seed",
+    default=52,
+    type=int,
+    help="random seed used to split train test and val ",
+)
+
+parser.add_argument(
+    "--batch_size",
+    default=16,
+    type=int,
+    help="batch size  ",
+)
+parser.add_argument(
+    "--epoch",
+    default=50,
+    type=int,
+    help="how many epoch will be used for training ",
+)
+
+parser.add_argument(
+    "--do_val", action="store_true", help="Whether do validation or not"
+)
+parser.add_argument(
+    "--result_dir",
+    required=True,
+    type=str,
+    help="The dir used to save result and loss figure",
+)
+parser.add_argument(
+    "--model_dir",
+    required=True,
+    type=str,
+    help="The dir used to save model for each epoch ",
+)
+args = parser.parse_args()
+
+if not os.path.exists(args.result_dir):
+    os.makedirs(args.result_dir,exist_ok=True)
+if not os.path.exists(args.model_dir):
+    os.makedirs(args.model_dir, exist_ok=True)
+if not os.path.exists(args.result_dir+'/model_figure'):
+    os.makedirs(args.result_dir+'/model_figure/', exist_ok=True)
+
+# print(sys.argv)
 d_ff = 1024
-dropout_rate = 0.3
-n_epochs = 50
-batch_size = 16
-n_head = np.int(sys.argv[1])
-lr_rate=np.double(sys.argv[2])
+dropout_rate = args.dropout_rate
+n_epochs = args.epoch
+batch_size = args.batch_size
+# n_head = np.int(sys.argv[1])
+# lr_rate=np.double(sys.argv[2])
+n_head = args.head_num
+lr_rate=args.learning_rate
 # rand_state=np.int(sys.argv[4])
-act_fun=sys.argv[3]
+act_fun=args.act_fun
 gain=1
 
-lr_rate=0.0001
-rand_state=52
+rand_state=args.rand_seed
 n_gene = 1708
 n_feature = 1708
 # n_class=0
 n_class = 34
-query_gene = 64
-val = True
+query_gene = 64 # not using but cannot delete
+val = args.do_val
 
 # save_memory=True
 save_memory = False
@@ -372,8 +450,7 @@ if __name__ == '__main__':
         auc_res.append(roc_auc)
         f1_res.append(f1)
 
-        torch.save(model, './model/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_gain_' + str(
-            gain) + '_34label_zscore_3l_product_' + str(act_fun) +'_epoch'+str(epoch)+'.model')
+        torch.save(model, args.model_dir+ '/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_' + str(act_fun) +'_epoch'+str(epoch)+'.model')
     res['confusion_matrix'] = confusion_matrix_res
     res['mcc'] = mcc_res
     res['f1'] = f1_res
@@ -383,11 +460,9 @@ if __name__ == '__main__':
     res['auc'] = auc_res
 
 
-    pl.dump(res, open('./model_res/3l/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_gain_' + str(
-        gain) + '_34label_zscore_3l_product_' + str(act_fun) +'.dat', 'wb'))
-    # pl.dump(res, open('./model_res/pytorch_transformer_head_'+str(n_head)+'_lr_'+str(lr_rate)+'_gain_'+str(gain)+'_34label_zscore_3l_product_'+str(act_fun)+'_loop_'+str(loop)+'.dat', 'wb'))
+    pl.dump(res, open(args.result_dir+'/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_' + str(act_fun) +'.dat', 'wb'))
     plt.plot(train_loss_list,label='train loss')
     plt.plot(val_loss_list,label='val loss')
     plt.legend()
-    plt.savefig('model_res/model_figure/3l/pytorch_transformer_head_'+str(n_head)+'_lr_'+str(lr_rate)+'_gain_'+str(gain)+'_34label_zscore_3l_product_'+str(act_fun)+'.png',format='png')
+    plt.savefig(args.result_dir+'/model_figure/pytorch_transformer_head_'+str(n_head)+'_lr_' + str(lr_rate) + '_' + str(act_fun) +'.png',format='png')
     plt.close()
