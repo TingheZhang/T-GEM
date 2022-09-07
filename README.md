@@ -20,13 +20,9 @@ After enviroment setup, use following command to activate this enviroments:
 
 ## 2. Train the model 
 G-TEM_pytorch_3l_34.py is the model that has the best performance for our cancer prediction task. The code can sinply run by :
-> python G-TEM_pytorch_3l_34.py 5 0.001 relu 
+> python G-TEM_pytorch_3l_34.py  --head_num 5 --learning_rate 0.0001 --act_fun leakyrelu --batch_size 16 --epoch 1 --do_val --dropout_rate 0.3 --result_dir model_res/3l/ --model_dir model/3l/
 
-
-which 5 is the number of head for each attention layer, 0.001 is the learning rate, relu is the activation function used for last attention layer. (you can choose the actvation form relu, leakyrelu,gelu or nan where nan means not using any activation function.)
-
-
-Model structure can be changed on line 193~ line 208. 
+The code attached used 3 attention layers. If you want to increase or decrease the number of layers, you can change the structure at line 252~ line 255 and line 271~ line 286. 
 
 Our input file can be downloaded from [here](https://drive.google.com/file/d/13-Xjqexsi8-ZkZm17vcH6oGIivL2O8XW/view?usp=sharing)
 ## 3. Compute the attribution score 
