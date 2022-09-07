@@ -29,7 +29,7 @@ from sklearn.metrics import accuracy_score,f1_score
 import seaborn
 #### comment this if you are not using GPU
 torch.set_num_threads(10)
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+#os.environ["CUDA_VISIBLE_DEVICES"] = ""
 ##########
 parser = argparse.ArgumentParser()
 
@@ -37,13 +37,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--head_num", default=None, type=int, required=True, help="The number of head for each layers"
 )
-# parser.add_argument(
-#     "--output_dir",
-#     type=str,
-#     required=True,
-#     help="The output directory where the model predictions and checkpoints will be written.",
-# )
-
 # Other parameters
 parser.add_argument(
     "--learning_rate",
