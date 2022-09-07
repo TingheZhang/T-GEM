@@ -2,9 +2,6 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
 
 import csv
 import scipy
@@ -20,9 +17,7 @@ import matplotlib.pyplot as plt
 import os, copy, sys
 import random
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-import itertools
-import inspect
+
 from torch.utils.checkpoint import checkpoint as cp
 from sklearn import svm, metrics
 from sklearn.metrics import accuracy_score, f1_score
@@ -82,7 +77,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-	"--do_val", action="store_true", help="Whether do validation or not"
+	"--do_val", action="store_true", help="Whether compute attribution on validation set or test set"
 )
 parser.add_argument(
 	"--abs", action="store_true", help="Whether to compute the absolute value of attribution score   "
@@ -416,52 +411,53 @@ if __name__ == '__main__':
 	auc_res = []
 	f1_res = []
 
-	permutation_val = torch.randperm(X_val_input.size()[0])
+	if val == True:
+		permutation_val = torch.randperm(X_val_input.size()[0])
 
-	correct_val = 0
-	val_loss = 0
+		correct_val = 0
+		val_loss = 0
 
-	model.eval()
-	with torch.no_grad():
-		batch_pred = []
-		batch_y_val_list = []
-		batch_pred_cate_val = []
-		for batch_idx_val, i in enumerate(range(0, X_val_input.size()[0], batch_size)):
-			indices_val = permutation_val[i:i + batch_size]
-			batch_x_val, batch_y_val = X_val_input[indices_val], y_val_input[indices_val]
+		model.eval()
+		with torch.no_grad():
+			batch_pred = []
+			batch_y_val_list = []
+			batch_pred_cate_val = []
+			for batch_idx_val, i in enumerate(range(0, X_val_input.size()[0], batch_size)):
+				indices_val = permutation_val[i:i + batch_size]
+				batch_x_val, batch_y_val = X_val_input[indices_val], y_val_input[indices_val]
 
-			batch_x_val, batch_y_val = batch_x_val.to(device), batch_y_val.to(device)
+				batch_x_val, batch_y_val = batch_x_val.to(device), batch_y_val.to(device)
 
-			output_val = model(batch_x_val.float())
-			val_loss += F.nll_loss(output_val, batch_y_val, reduction='sum')
-			pred_val = output_val.argmax(dim=1, keepdim=True)
+				output_val = model(batch_x_val.float())
+				val_loss += F.nll_loss(output_val, batch_y_val, reduction='sum')
+				pred_val = output_val.argmax(dim=1, keepdim=True)
 
-			correct_val += pred_val.eq(batch_y_val.view_as(pred_val)).sum().item()
-			batch_pred.append(pred_val.cpu().data.numpy())
-			batch_y_val_list.append(batch_y_val.cpu().data.numpy())
-			batch_pred_cate_val.append(output_val.cpu().data.numpy())
+				correct_val += pred_val.eq(batch_y_val.view_as(pred_val)).sum().item()
+				batch_pred.append(pred_val.cpu().data.numpy())
+				batch_y_val_list.append(batch_y_val.cpu().data.numpy())
+				batch_pred_cate_val.append(output_val.cpu().data.numpy())
 
-		val_loss /= len(X_val_input)
+			val_loss /= len(X_val_input)
 
-		val_loss_list.append(val_loss)
+			val_loss_list.append(val_loss)
 
-		print('\nval set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
-			val_loss, correct_val, len(X_val_input),
-			100. * correct_val / len(X_val_input)))
+			print('\nval set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
+				val_loss, correct_val, len(X_val_input),
+				100. * correct_val / len(X_val_input)))
 
-		yy_val = np.hstack(batch_y_val_list).reshape(-1, 1)
-		ppred_classes = np.vstack(batch_pred)
+			yy_val = np.hstack(batch_y_val_list).reshape(-1, 1)
+			ppred_classes = np.vstack(batch_pred)
 
-		acc_val = accuracy_score(yy_val, ppred_classes)
-		f1 = f1_score(yy_val, ppred_classes, average='micro')
+			acc_val = accuracy_score(yy_val, ppred_classes)
+			f1 = f1_score(yy_val, ppred_classes, average='micro')
 
-		confusion_mat_val = metrics.confusion_matrix(yy_val, ppred_classes)
-		mcc_val = metrics.matthews_corrcoef(yy_val, ppred_classes)
+			confusion_mat_val = metrics.confusion_matrix(yy_val, ppred_classes)
+			mcc_val = metrics.matthews_corrcoef(yy_val, ppred_classes)
 
-		encoder_ = LabelBinarizer()
-		yy_val_ = encoder_.fit_transform(yy_val)
-		roc_auc_val = metrics.roc_auc_score(yy_val_, np.exp(np.vstack(batch_pred_cate_val)), multi_class='ovr',
-											average='micro')
+			encoder_ = LabelBinarizer()
+			yy_val_ = encoder_.fit_transform(yy_val)
+			roc_auc_val = metrics.roc_auc_score(yy_val_, np.exp(np.vstack(batch_pred_cate_val)), multi_class='ovr',
+												average='micro')
 
 	test_loss = 0
 	correct = 0
@@ -515,11 +511,17 @@ if __name__ == '__main__':
 	attr_ave_acc_mean_score_list_10 = []
 	attr_med_acc_mean_score_list_10 = []
 	for cancer_type in tqdm(range(n_class)):
-		# precision_val = confusion_mat_val[cancer_type, cancer_type] / sum(confusion_mat_val[cancer_type, :])
-		precision_test = confusion_mat_test[cancer_type, cancer_type] / sum(confusion_mat_test[cancer_type, :])
-		precision_=precision_test
-		X_input=X_test ## change this to X_val if you want to get the attribution for validation data
-		y_input=y_test
+		if val == True:
+			precision_val = confusion_mat_val[cancer_type, cancer_type] / sum(confusion_mat_val[cancer_type, :])
+			precision_ = precision_val
+			X_input = X_val  ## change this to X_val if you want to get the attribution for validation data
+			y_input = y_val
+		else:
+			precision_test = confusion_mat_test[cancer_type, cancer_type] / sum(confusion_mat_test[cancer_type, :])
+			precision_=precision_test
+			X_input=X_test ## change this to X_val if you want to get the attribution for validation data
+			y_input=y_test
+
 		if attr_method == 'ig':
 			from captum.attr import IntegratedGradients
 
