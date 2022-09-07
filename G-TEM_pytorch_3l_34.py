@@ -2,13 +2,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
 
-import csv
-import scipy
-import numpy as np
 
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder,OneHotEncoder
 import pickle as pl
@@ -20,16 +14,14 @@ import matplotlib.pyplot as plt
 import os,copy,sys
 import random
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-import itertools
-import inspect
+
 from torch.utils.checkpoint import checkpoint as cp
 from sklearn import svm,metrics
 from sklearn.metrics import accuracy_score,f1_score
-import seaborn
+
 #### comment this if you are not using GPU
 torch.set_num_threads(10)
-#os.environ["CUDA_VISIBLE_DEVICES"] = ""
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 ##########
 parser = argparse.ArgumentParser()
 
