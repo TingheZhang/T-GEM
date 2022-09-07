@@ -31,10 +31,11 @@ To compute the attribution score, it can be easily got by:
 > python G-TEM_t_attr_allcancer.py ig 
 > python G-TEM_t_attr_allcancer.py --head_num 5 --learning_rate 0.0001 --act_fun leakyrelu --batch_size 16 --epoch 1 --do_val --dropout_rate 0.3 --result_dir attr_34cancer/ --attr_method ig --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model --abs 
 
-The matched parameter need to be adjust for different project at line 35 ~ line 51. Notice, the model structure in G-TEM_t_attr_allcancer.py has to match the structure at G-TEM_pytorch_3l_34.py .  The directory of trained model should be added at line 318
+Notice, the model structure in G-TEM_t_attr_allcancer.py has to match the structure at G-TEM_pytorch_3l_34.py. 
+This code can compute the mean and medain of attribuiton score for the all val/test samples. The attribution score can be used to rank the input importance or do enrichment. 
+The input gene importance can be also analyzed by aliblition study. We removed the gene with top attibution score batch by batch and test their affection to accruacy.
+Significant accrucay dropped means these genes are import to predict this type of cancers. 
 
-
-Gene symbol and its attribution score can be got for each cancer after running the program. 
 ## 4. Compute and visulize the attention weights and entropy for each attention layers
 To discover the inner relationship at each layer, we can use attention weights and entropy of attention wieghts.  
 G-TEM_t_vis.py has two mode 'attn' and 'vis'. 'attn' is used for get the attn value for each layer
