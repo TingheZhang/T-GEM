@@ -25,11 +25,13 @@ G-TEM_pytorch_3l_34.py is the model that has the best performance for our cancer
 The code attached used 3 attention layers. If you want to increase or decrease the number of layers, you can change the structure at line 252~ line 255 and line 271~ line 286. 
 
 Our input file can be downloaded from [here](https://drive.google.com/file/d/13-Xjqexsi8-ZkZm17vcH6oGIivL2O8XW/view?usp=sharing)
-## 3. Compute the attribution score 
+## 3. Compute the attribution score and give the gene importance rank 
 To evaluate which gene is more important to predicte specific cancer, we use integer gradient(IG) to compute the attribution score for each test samples. The larger score means more importance. 
 To compute the attribution score, it can be easily got by:
-> python G-TEM_t_attr_allcancer.py ig 
 > python G-TEM_t_attr_allcancer.py --head_num 5 --learning_rate 0.0001 --act_fun leakyrelu --batch_size 16 --epoch 1 --do_val --dropout_rate 0.3 --result_dir attr_34cancer/ --attr_method ig --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model --abs 
+
+The outpult files: validation result/ test result ; ablation study result; Gene importance rank for each cancer prediction;  
+
 
 Notice, the model structure in G-TEM_t_attr_allcancer.py has to match the structure at G-TEM_pytorch_3l_34.py. 
 
