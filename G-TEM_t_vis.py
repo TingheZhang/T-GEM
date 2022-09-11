@@ -10,6 +10,7 @@ import glob
 import csv
 import scipy
 import numpy as np
+from tqdm import tqdm
 
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder,OneHotEncoder
 import pickle as pl
@@ -31,30 +32,112 @@ from sklearn import svm,metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score,f1_score
 import seaborn
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-# torch.set_num_threads(10)
+
+###########change the number to your GPU ID
+########### if you are using CPU， then delete this number
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+parser = argparse.ArgumentParser()
+
+# Required parameters
+parser.add_argument(
+	"--head_num", default=None, type=int, required=True, help="The number of head for each layers"
+)
+parser.add_argument(
+	"--task",
+	required=True,
+	type=str,
+	help="choose which function should be processed, attn is to compute the attribution score ; vis is for visualization ",
+)
+
+# Other parameters
+parser.add_argument(
+	"--learning_rate",
+	default=0.0001,
+	type=float,
+	help="learning rate used for training",
+)
+parser.add_argument(
+	"--dropout_rate",
+	default=0.3,
+	type=float,
+	help="dropout rate used for training",
+)
+
+parser.add_argument(
+	"--act_fun",
+	default='nan',
+	type=str,
+	help="The activation function at the model top layer, can be chosen from relu, leakyrelu, or gelu. Otherwise use nan for no activation function",
+)
+parser.add_argument(
+	"--rand_seed",
+	default=52,
+	type=int,
+	help="random seed used to split train test and val ",
+)
+
+parser.add_argument(
+	"--batch_size",
+	default=16,
+	type=int,
+	help="batch size  ",
+)
+parser.add_argument(
+	"--epoch",
+	default=50,
+	type=int,
+	help="how many epoch will be used for training ",
+)
+
+parser.add_argument(
+	"--do_val", action="store_true", help="Whether split the val set from train set"
+)
+parser.add_argument(
+	"--attr_train", action="store_true", help="Whether compute attribution on train set"
+)
+parser.add_argument(
+	"--result_dir",
+	required=True,
+	type=str,
+	help="The dir used to  save result",
+)
+parser.add_argument(
+	"--model_location",
+	required=True,
+	type=str,
+	help="the location of model that is going to be intreperted",
+)
+
+
+args = parser.parse_args()
+
+##################
 print(sys.argv)
 d_ff = 1024
-dropout_rate = 0.3
-n_epochs = 50
-batch_size = 64
-n_head = 5
-gain=5
-lr_rate=0.0005
-# rand_state=np.int(sys.argv[4])
-act_fun='nan'
-rand_state=52
-
+dropout_rate = args.dropout_rate
+n_epochs = args.epoch
+batch_size = args.batch_size
+fun=args.task
+n_head = args.head_num
+lr_rate = args.learning_rate
+act_fun = args.act_fun
+gain = 1
+include_train=args.attr_train
+rand_state = args.rand_seed
 n_gene = 1708
 n_feature = 1708
-# n_class=34
+# n_class=0
 n_class = 34
-query_gene = 64
-val = True
+query_gene = 64  # not using but cannot delete
+val = args.do_val
+
+save_memory = False
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
 
 #######choose the function at the begining,
 #######'attn' for get the attn value for each layer, 'vis' for viulize the attn
-fun=sys.argv[1]
 
 save_memory = False
 
@@ -232,7 +315,7 @@ class MyNet(torch.nn.Module):
 
 if __name__ == '__main__':
 
-	y, data_df, pathway_gene, pathway, cancer_name = pl.load(open('../pathway_data.pckl', 'rb'))
+	y, data_df, pathway_gene, pathway, cancer_name = pl.load(open('./pathway_data.pckl', 'rb'))
 	data_ = np.array(data_df)
 	x = np.float32(data_)
 	gene_list = data_df.columns.tolist()
@@ -298,11 +381,13 @@ if __name__ == '__main__':
 	y_train_input=torch.from_numpy(np.hstack(y_train))
 	y_test_input=torch.from_numpy(np.hstack(y_test))
 
-	model=MyNet(batch_size,n_head,n_gene,n_feature,n_class,query_gene,d_ff,dropout_rate,mode=0).to(device)
+	# model=MyNet(batch_size,n_head,n_gene,n_feature,n_class,query_gene,d_ff,dropout_rate,mode=0).to(device)
 
-	file = glob.glob(
-		'../model_test/pytorch_transformer_head*_epoch*')
-	model = torch.load(file[0])
+	file = args.model_location
+
+	model = torch.load(file)
+	model=model.to(device)
+
 
 	def get_softmax_map(model_WQ,model_WK, model_WV,model_W0, input_gene):
 		def mask_softmax_self(x):
@@ -399,138 +484,139 @@ if __name__ == '__main__':
 
 
 	# ###################get the performance from the each attention layer or head
-	####train
 	if fun=='attn':
-		permutation_test = torch.randperm(X_train_input.size()[0])
-		attn_1=[]
-		attn_2=[]
-		attn_3=[]
-		attn_1_sub=[]
-		attn_2_sub=[]
-		attn_3_sub=[]
+		####train
+		if include_train:
+			permutation_test = torch.randperm(X_train_input.size()[0])
+			attn_1=[]
+			attn_2=[]
+			attn_3=[]
+			attn_1_sub=[]
+			attn_2_sub=[]
+			attn_3_sub=[]
 
-		head_output_1=[]
-		head_output_2=[]
-		head_output_3=[]
+			head_output_1=[]
+			head_output_2=[]
+			head_output_3=[]
 
-		layer_entropy1 = []
-		layer_entropy2 = []
-		layer_entropy3 = []
+			layer_entropy1 = []
+			layer_entropy2 = []
+			layer_entropy3 = []
 
-		train_softmax_p_1 = []
-		train_softmax_p_1_entropy = []
-		# train_softmax_p_1_avg = 0
-		train_softmax_p_1_avg = []
+			train_softmax_p_1 = []
+			train_softmax_p_1_entropy = []
+			# train_softmax_p_1_avg = 0
+			train_softmax_p_1_avg = []
 
-		train_softmax_p_2 = []
-		# train_softmax_p_2_avg = 0
-		train_softmax_p_2_avg=[]
-		train_softmax_p_2_entropy = []
+			train_softmax_p_2 = []
+			# train_softmax_p_2_avg = 0
+			train_softmax_p_2_avg=[]
+			train_softmax_p_2_entropy = []
 
-		train_softmax_p_3 = []
-		train_softmax_p_3_entropy = []
-		# train_softmax_p_3_avg = 0
-		train_softmax_p_3_avg=[]
+			train_softmax_p_3 = []
+			train_softmax_p_3_entropy = []
+			# train_softmax_p_3_avg = 0
+			train_softmax_p_3_avg=[]
 
-		y_train_attn=[]
-		correct_train=0
-		n_samples = len(X_train_input)
-		with torch.no_grad():
-			model.eval()
+			y_train_attn=[]
+			correct_train=0
+			n_samples = len(X_train_input)
+			with torch.no_grad():
+				model.eval()
+				print('calculate train set')
+				for batch_idx, i in enumerate(tqdm(range(0, X_train_input.size()[0], batch_size))):
 
-			for batch_idx, i in enumerate(range(0, X_train_input.size()[0], batch_size)):
+					indices = permutation_test[i:i + batch_size]
+					batch_x_train, batch_y_train = X_train_input[indices], y_train_input[indices]
+					batch_x_train, batch_y_train = batch_x_train.to(device), batch_y_train.to(device)
+					y_train_attn.append(batch_y_train.cpu().data.numpy())
+					# print('train ' + str(len(indices)/X_train_input.size()[0]*batch_idx))
 
-				indices = permutation_test[i:i + batch_size]
-				batch_x_train, batch_y_train = X_train_input[indices], y_train_input[indices]
-				batch_x_train, batch_y_train = batch_x_train.to(device), batch_y_train.to(device)
-				y_train_attn.append(batch_y_train.cpu().data.numpy())
-				print('train ' + str(len(indices)/X_train_input.size()[0]*batch_idx))
+					train_softmax_p1, attn1,head_output1 = get_softmax_map(model_WQ1,model_WK1, model_WV1,model_W01, batch_x_train)
+					attn_1.append(attn1.cpu().data.numpy())
+					head_output_1.append(head_output1.cpu().data.numpy())
+					attn1 = attn1.view(-1, attn1.shape[1])
 
-				train_softmax_p1, attn1,head_output1 = get_softmax_map(model_WQ1,model_WK1, model_WV1,model_W01, batch_x_train)
-				attn_1.append(attn1.cpu().data.numpy())
-				head_output_1.append(head_output1.cpu().data.numpy())
-				attn1 = attn1.view(-1, attn1.shape[1])
+					attn1_ = model.sublayer(batch_x_train, attn1)
+					attn_1_sub.append(attn1_.cpu().data.numpy())
+					train_softmax_p2, attn2,head_output2 = get_softmax_map(model_WQ2,model_WK2, model_WV2,model_W02, attn1_)
+					attn_2.append(attn2.cpu().data.numpy())
+					head_output_2.append(head_output2.cpu().data.numpy())
+					attn2 = attn2.view(-1, attn2.shape[1])
 
-				attn1_ = model.sublayer(batch_x_train, attn1)
-				attn_1_sub.append(attn1_.cpu().data.numpy())
-				train_softmax_p2, attn2,head_output2 = get_softmax_map(model_WQ2,model_WK2, model_WV2,model_W02, attn1_)
-				attn_2.append(attn2.cpu().data.numpy())
-				head_output_2.append(head_output2.cpu().data.numpy())
-				attn2 = attn2.view(-1, attn2.shape[1])
+					attn2_ = model.sublayer(attn1_, attn2)
+					attn_2_sub.append(attn2_.cpu().data.numpy())
+					train_softmax_p3, attn3,head_output3 = get_softmax_map(model_WQ3,model_WK3, model_WV3,model_W03, attn2_)
+					attn_3.append(attn3.cpu().data.numpy())
+					head_output_3.append(head_output3.cpu().data.numpy())
+					attn3 = attn3.view(-1, attn3.shape[1])
 
-				attn2_ = model.sublayer(attn1_, attn2)
-				attn_2_sub.append(attn2_.cpu().data.numpy())
-				train_softmax_p3, attn3,head_output3 = get_softmax_map(model_WQ3,model_WK3, model_WV3,model_W03, attn2_)
-				attn_3.append(attn3.cpu().data.numpy())
-				head_output_3.append(head_output3.cpu().data.numpy())
-				attn3 = attn3.view(-1, attn3.shape[1])
+					attn3_ = model.sublayer(attn2_, attn3)
+					attn_3_sub.append(attn3_.cpu().data.numpy())
 
-				attn3_ = model.sublayer(attn2_, attn3)
-				attn_3_sub.append(attn3_.cpu().data.numpy())
+					y_pred = model.fc(attn3_)
+					pred_train = F.log_softmax(y_pred, dim=1).argmax(dim=1, keepdim=True)
 
-				y_pred = model.fc(attn3_)
-				pred_train = F.log_softmax(y_pred, dim=1).argmax(dim=1, keepdim=True)
+					correct_train += pred_train.eq(batch_y_train.view_as(pred_train)).sum().item()
 
-				correct_train += pred_train.eq(batch_y_train.view_as(pred_train)).sum().item()
+					layer_entropy1_h = []
+					train_softmax_p_1_h_avg = []
+					train_softmax_p_1_h_entropy = []
+					layer_entropy2_h = []
+					train_softmax_p_2_h_avg = []
+					train_softmax_p_2_h_entropy = []
+					train_softmax_p_3_h_entropy = []
+					layer_entropy3_h = []
+					train_softmax_p_3_h_avg = []
+					for ind_h in range(n_head):
+						layer_entropy1_h.append(scipy.stats.entropy(train_softmax_p1[ind_h].cpu().data.numpy(), axis=2))
 
-				layer_entropy1_h = []
-				train_softmax_p_1_h_avg = []
-				train_softmax_p_1_h_entropy = []
-				layer_entropy2_h = []
-				train_softmax_p_2_h_avg = []
-				train_softmax_p_2_h_entropy = []
-				train_softmax_p_3_h_entropy = []
-				layer_entropy3_h = []
-				train_softmax_p_3_h_avg = []
-				for ind_h in range(n_head):
-					layer_entropy1_h.append(scipy.stats.entropy(train_softmax_p1[ind_h].cpu().data.numpy(), axis=2))
+						train_softmax_p_1_h_avg.append(np.sum(train_softmax_p1[ind_h].cpu().data.numpy(), axis=0))
+						train_softmax_p_1_h_entropy.append(scipy.stats.entropy(train_softmax_p1[ind_h].cpu().data.numpy(), axis=2))
 
-					train_softmax_p_1_h_avg.append(np.sum(train_softmax_p1[ind_h].cpu().data.numpy(), axis=0))
-					train_softmax_p_1_h_entropy.append(scipy.stats.entropy(train_softmax_p1[ind_h].cpu().data.numpy(), axis=2))
+						train_softmax_p_2_h_entropy.append(scipy.stats.entropy(train_softmax_p2[ind_h].cpu().data.numpy(), axis=2))
+						layer_entropy2_h.append(scipy.stats.entropy(train_softmax_p2[ind_h].cpu().data.numpy(), axis=2))
 
-					train_softmax_p_2_h_entropy.append(scipy.stats.entropy(train_softmax_p2[ind_h].cpu().data.numpy(), axis=2))
-					layer_entropy2_h.append(scipy.stats.entropy(train_softmax_p2[ind_h].cpu().data.numpy(), axis=2))
+						train_softmax_p_2_h_avg.append(np.sum(train_softmax_p2[ind_h].cpu().data.numpy(), axis=0))
+						train_softmax_p_3_h_entropy.append(scipy.stats.entropy(train_softmax_p3[ind_h].cpu().data.numpy(), axis=2))
+						layer_entropy3_h.append(scipy.stats.entropy(train_softmax_p3[ind_h].cpu().data.numpy(), axis=2))
 
-					train_softmax_p_2_h_avg.append(np.sum(train_softmax_p2[ind_h].cpu().data.numpy(), axis=0))
-					train_softmax_p_3_h_entropy.append(scipy.stats.entropy(train_softmax_p3[ind_h].cpu().data.numpy(), axis=2))
-					layer_entropy3_h.append(scipy.stats.entropy(train_softmax_p3[ind_h].cpu().data.numpy(), axis=2))
+						train_softmax_p_3_h_avg.append(np.sum(train_softmax_p3[ind_h].cpu().data.numpy(), axis=0))
 
-					train_softmax_p_3_h_avg.append(np.sum(train_softmax_p3[ind_h].cpu().data.numpy(), axis=0))
+					layer_entropy1.append(layer_entropy1_h)
+					layer_entropy2.append(layer_entropy2_h)
+					layer_entropy3.append(layer_entropy3_h)
+					train_softmax_p_1_avg.append(train_softmax_p_1_h_avg)
+					train_softmax_p_2_avg.append(train_softmax_p_2_h_avg)
+					train_softmax_p_3_avg.append(train_softmax_p_3_h_avg)
+					train_softmax_p_1_entropy.append(train_softmax_p_1_h_entropy)
+					train_softmax_p_2_entropy.append(train_softmax_p_2_h_entropy)
+					train_softmax_p_3_entropy.append(train_softmax_p_3_h_entropy)
 
-				layer_entropy1.append(layer_entropy1_h)
-				layer_entropy2.append(layer_entropy2_h)
-				layer_entropy3.append(layer_entropy3_h)
-				train_softmax_p_1_avg.append(train_softmax_p_1_h_avg)
-				train_softmax_p_2_avg.append(train_softmax_p_2_h_avg)
-				train_softmax_p_3_avg.append(train_softmax_p_3_h_avg)
-				train_softmax_p_1_entropy.append(train_softmax_p_1_h_entropy)
-				train_softmax_p_2_entropy.append(train_softmax_p_2_h_entropy)
-				train_softmax_p_3_entropy.append(train_softmax_p_3_h_entropy)
+			print(correct_train / len(X_train_input))
+			attn_1_train=np.vstack(attn_1)
+			attn_2_train=np.vstack(attn_2)
+			attn_3_train=np.vstack(attn_3)
+			attn_1_sub_train=np.vstack(attn_1_sub)
+			attn_2_sub_train=np.vstack(attn_2_sub)
+			attn_3_sub_train=np.vstack(attn_3_sub)
+			head_output_1_train = np.vstack(head_output_1)
+			head_output_2_train = np.vstack(head_output_2)
+			head_output_3_train=np.vstack(head_output_3)
 
-		print(correct_train / len(X_train_input))
-		attn_1_train=np.vstack(attn_1)
-		attn_2_train=np.vstack(attn_2)
-		attn_3_train=np.vstack(attn_3)
-		attn_1_sub_train=np.vstack(attn_1_sub)
-		attn_2_sub_train=np.vstack(attn_2_sub)
-		attn_3_sub_train=np.vstack(attn_3_sub)
-		head_output_1_train = np.vstack(head_output_1)
-		head_output_2_train = np.vstack(head_output_2)
-		head_output_3_train=np.vstack(head_output_3)
+			train_layer_entropy1_all=np.concatenate(layer_entropy1, axis=1)
+			train_layer_entropy2_all = np.concatenate(layer_entropy2, axis=1)
+			train_layer_entropy3_all = np.concatenate(layer_entropy3, axis=1)
+			train_softmax_p_1_avg_all=np.sum(train_softmax_p_1_avg, axis=0)
+			train_softmax_p_2_avg_all=np.sum(train_softmax_p_2_avg, axis=0)
+			train_softmax_p_3_avg_all=np.sum(train_softmax_p_3_avg, axis=0)
+			train_softmax_p_1_entropy_all=np.concatenate(train_softmax_p_1_entropy, axis=1)
+			train_softmax_p_2_entropy_all = np.concatenate(train_softmax_p_2_entropy, axis=1)
+			train_softmax_p_3_entropy_all = np.concatenate(train_softmax_p_3_entropy, axis=1)
+			train_softmax_p_ave = np.stack((train_softmax_p_1_avg_all / n_samples, train_softmax_p_2_avg_all / n_samples,
+										   train_softmax_p_3_avg_all / n_samples))
 
-		train_layer_entropy1_all=np.concatenate(layer_entropy1, axis=1)
-		train_layer_entropy2_all = np.concatenate(layer_entropy2, axis=1)
-		train_layer_entropy3_all = np.concatenate(layer_entropy3, axis=1)
-		train_softmax_p_1_avg_all=np.sum(train_softmax_p_1_avg, axis=0)
-		train_softmax_p_2_avg_all=np.sum(train_softmax_p_2_avg, axis=0)
-		train_softmax_p_3_avg_all=np.sum(train_softmax_p_3_avg, axis=0)
-		train_softmax_p_1_entropy_all=np.concatenate(train_softmax_p_1_entropy, axis=1)
-		train_softmax_p_2_entropy_all = np.concatenate(train_softmax_p_2_entropy, axis=1)
-		train_softmax_p_3_entropy_all = np.concatenate(train_softmax_p_3_entropy, axis=1)
-		train_softmax_p_ave = np.stack((train_softmax_p_1_avg_all / n_samples, train_softmax_p_2_avg_all / n_samples,
-									   train_softmax_p_3_avg_all / n_samples))
-
-		y_train_attn=np.hstack(y_train_attn)
+			y_train_attn=np.hstack(y_train_attn)
 		###test
 		permutation_test = torch.randperm(X_test_input.size()[0])
 		output_z = []
@@ -573,8 +659,8 @@ if __name__ == '__main__':
 		with torch.no_grad():
 			model.eval()
 
-			for batch_idx, i in enumerate(range(0, X_test_input.size()[0], batch_size)):
-				print('test '+str(batch_idx))
+			for batch_idx, i in enumerate(tqdm(range(0, X_test_input.size()[0], batch_size))):
+				# print('test '+str(batch_idx))
 				indices = permutation_test[i:i + batch_size]
 				batch_x_test, batch_y_test = X_test_input[indices], y_test_input[indices]
 				batch_x_test, batch_y_test = batch_x_test.to(device), batch_y_test.to(device)
@@ -655,7 +741,7 @@ if __name__ == '__main__':
 		test_softmax_p_ave = np.stack((test_softmax_p_1_avg_all / n_samples, test_softmax_p_2_avg_all / n_samples,
 										test_softmax_p_3_avg_all / n_samples))
 
-		print(correct_test / len(X_test_input))
+		# print(correct_test / len(X_test_input))
 		attn_1_test=np.vstack(attn_1)
 		attn_2_test=np.vstack(attn_2)
 		attn_3_test=np.vstack(attn_3)
@@ -683,20 +769,6 @@ if __name__ == '__main__':
 		softmax_entropy['test_softmax_p_2_entropy_all']=test_softmax_p_2_entropy_all
 		softmax_entropy['test_softmax_p_3_entropy_all']=test_softmax_p_3_entropy_all
 		softmax_entropy['test_softmax_p_ave']=test_softmax_p_ave
-
-		softmax_entropy['train_layer_entropy1_all']=train_layer_entropy1_all
-		softmax_entropy['train_layer_entropy2_all']=train_layer_entropy2_all
-		softmax_entropy['train_layer_entropy3_all']=train_layer_entropy3_all
-
-		softmax_entropy['train_softmax_p_1_avg_all']=train_softmax_p_1_avg_all
-		softmax_entropy['train_softmax_p_2_avg_all']=train_softmax_p_2_avg_all
-		softmax_entropy['train_softmax_p_3_avg_all']=train_softmax_p_3_avg_all
-		softmax_entropy['train_softmax_p_1_entropy_all']=train_softmax_p_1_entropy_all
-		softmax_entropy['train_softmax_p_2_entropy_all']=train_softmax_p_2_entropy_all
-		softmax_entropy['train_softmax_p_3_entropy_all']=train_softmax_p_3_entropy_all
-		softmax_entropy['train_softmax_p_ave']=train_softmax_p_ave
-
-		attn['y_train_attn']=y_train_attn
 		attn['attn_1_test']=attn_1_test
 		attn['attn_2_test']=attn_2_test
 		attn['attn_3_test']=attn_3_test
@@ -706,56 +778,60 @@ if __name__ == '__main__':
 		attn['attn_3_sub_test']=attn_3_sub_test
 
 		attn['y_test_attn']=y_test_attn
-		attn['attn_1_train']=attn_1_train
-		attn['attn_2_train']=attn_2_train
-		attn['attn_3_train']=attn_3_train
 
-		attn['attn_1_sub_train']=attn_1_sub_train
-		attn['attn_2_sub_train']=attn_2_sub_train
-		attn['attn_3_sub_train']=attn_3_sub_train
-
-
-		head_output['head_output_1_train']=head_output_1_train
-		head_output['head_output_2_train']=head_output_2_train
-		head_output['head_output_3_train']=head_output_3_train
 
 		head_output['head_output_1_test']=head_output_1_test
 		head_output['head_output_2_test'] = head_output_2_test
 		head_output['head_output_3_test'] = head_output_3_test
 
+		if include_train:
+			softmax_entropy['train_layer_entropy1_all']=train_layer_entropy1_all
+			softmax_entropy['train_layer_entropy2_all']=train_layer_entropy2_all
+			softmax_entropy['train_layer_entropy3_all']=train_layer_entropy3_all
 
-		pl.dump(attn,open("./model_res_vis_all/attn_3l_product.plk","wb"))
-		pl.dump(head_output,open("./model_res_vis_all/head_output_3l_product.plk","wb"))
-		pl.dump(softmax_entropy,open("./model_res_vis_all/softmax_entropy_3l_product.plk","wb"))
+			softmax_entropy['train_softmax_p_1_avg_all']=train_softmax_p_1_avg_all
+			softmax_entropy['train_softmax_p_2_avg_all']=train_softmax_p_2_avg_all
+			softmax_entropy['train_softmax_p_3_avg_all']=train_softmax_p_3_avg_all
+			softmax_entropy['train_softmax_p_1_entropy_all']=train_softmax_p_1_entropy_all
+			softmax_entropy['train_softmax_p_2_entropy_all']=train_softmax_p_2_entropy_all
+			softmax_entropy['train_softmax_p_3_entropy_all']=train_softmax_p_3_entropy_all
+			softmax_entropy['train_softmax_p_ave']=train_softmax_p_ave
 
+			attn['y_train_attn']=y_train_attn
+			attn['attn_1_train'] = attn_1_train
+			attn['attn_2_train'] = attn_2_train
+			attn['attn_3_train'] = attn_3_train
+
+			attn['attn_1_sub_train'] = attn_1_sub_train
+			attn['attn_2_sub_train'] = attn_2_sub_train
+			attn['attn_3_sub_train'] = attn_3_sub_train
+
+			head_output['head_output_1_train'] = head_output_1_train
+			head_output['head_output_2_train'] = head_output_2_train
+			head_output['head_output_3_train'] = head_output_3_train
+
+
+		if not os.path.exists(args.result_dir):
+			os.makedirs(args.result_dir, exist_ok=True)
+		pl.dump(attn,open(args.result_dir+"attn_3l_product.plk","wb"))
+		pl.dump(head_output,open(args.result_dir+"head_output_3l_product.plk","wb"))
+		pl.dump(softmax_entropy,open(args.result_dir+"softmax_entropy_3l_product.plk","wb"))
 
 	################ heatmap for all samples (training)
 	if fun=='vis':
-		attn_dict=pl.load(open("./model_res_vis_all/attn_3l_product.plk","rb"))
+		attn_dict=pl.load(open(args.result_dir+"attn_3l_product.plk","rb"))
+		softmax_entropy=pl.load(open(args.result_dir+"softmax_entropy_3l_product.plk","rb"))
+		head_output_dict=pl.load(open(args.result_dir+"head_output_3l_product.plk","rb"))
+
 		attn_1_test=attn_dict['attn_1_test']
 		attn_2_test=attn_dict['attn_2_test']
 		attn_3_test=attn_dict['attn_3_test']
 		y_test_attn=attn_dict['y_test_attn']
 
-		attn_1_train=attn_dict['attn_1_train']
-		attn_2_train=attn_dict['attn_2_train']
-		attn_3_train=attn_dict['attn_3_train']
-		y_train_attn=attn_dict['y_train_attn']
 
-		attn_1_sub_train=attn_dict['attn_1_sub_train']
-		attn_2_sub_train=attn_dict['attn_2_sub_train']
-		attn_3_sub_train=attn_dict['attn_3_sub_train']
-
-		head_output_dict=pl.load(open("./model_res_vis_all/head_output_3l_product.plk","rb"))
 		head_output_1_test=head_output_dict['head_output_1_test']
 		head_output_2_test=head_output_dict['head_output_2_test']
 		head_output_3_test=head_output_dict['head_output_3_test']
-
-		head_output_1_train=head_output_dict['head_output_1_train']
-		head_output_2_train=head_output_dict['head_output_2_train']
-		head_output_3_train=head_output_dict['head_output_3_train']
-
-		softmax_entropy=pl.load(open("./model_res_vis_all/softmax_entropy_3l_product.plk","rb"))
 
 		test_layer_entropy1_all=softmax_entropy['test_layer_entropy1_all']
 		test_layer_entropy2_all=softmax_entropy['test_layer_entropy2_all']
@@ -768,16 +844,31 @@ if __name__ == '__main__':
 		test_softmax_p_3_entropy_all=softmax_entropy['test_softmax_p_3_entropy_all']
 		test_softmax_p_ave=softmax_entropy['test_softmax_p_ave']
 
-		train_layer_entropy1_all=softmax_entropy['train_layer_entropy1_all']
-		train_layer_entropy2_all=softmax_entropy['train_layer_entropy2_all']
-		train_layer_entropy3_all=softmax_entropy['train_layer_entropy3_all']
-		train_softmax_p_1_avg_all=softmax_entropy['train_softmax_p_1_avg_all']
-		train_softmax_p_2_avg_all=softmax_entropy['train_softmax_p_2_avg_all']
-		train_softmax_p_3_avg_all=softmax_entropy['train_softmax_p_3_avg_all']
-		train_softmax_p_1_entropy_all=softmax_entropy['train_softmax_p_1_entropy_all']
-		train_softmax_p_2_entropy_all=softmax_entropy['train_softmax_p_2_entropy_all']
-		train_softmax_p_3_entropy_all=softmax_entropy['train_softmax_p_3_entropy_all']
-		train_softmax_p_ave=softmax_entropy['train_softmax_p_ave']
+		if include_train:
+			attn_1_train=attn_dict['attn_1_train']
+			attn_2_train=attn_dict['attn_2_train']
+			attn_3_train=attn_dict['attn_3_train']
+			y_train_attn=attn_dict['y_train_attn']
+
+			attn_1_sub_train=attn_dict['attn_1_sub_train']
+			attn_2_sub_train=attn_dict['attn_2_sub_train']
+			attn_3_sub_train=attn_dict['attn_3_sub_train']
+
+
+			head_output_1_train=head_output_dict['head_output_1_train']
+			head_output_2_train=head_output_dict['head_output_2_train']
+			head_output_3_train=head_output_dict['head_output_3_train']
+
+			train_layer_entropy1_all=softmax_entropy['train_layer_entropy1_all']
+			train_layer_entropy2_all=softmax_entropy['train_layer_entropy2_all']
+			train_layer_entropy3_all=softmax_entropy['train_layer_entropy3_all']
+			train_softmax_p_1_avg_all=softmax_entropy['train_softmax_p_1_avg_all']
+			train_softmax_p_2_avg_all=softmax_entropy['train_softmax_p_2_avg_all']
+			train_softmax_p_3_avg_all=softmax_entropy['train_softmax_p_3_avg_all']
+			train_softmax_p_1_entropy_all=softmax_entropy['train_softmax_p_1_entropy_all']
+			train_softmax_p_2_entropy_all=softmax_entropy['train_softmax_p_2_entropy_all']
+			train_softmax_p_3_entropy_all=softmax_entropy['train_softmax_p_3_entropy_all']
+			train_softmax_p_ave=softmax_entropy['train_softmax_p_ave']
 
 		head_entropy = []
 		for head in range(5):
@@ -785,8 +876,7 @@ if __name__ == '__main__':
 			head_entropy.append(np.mean(test_layer_entropy2_all[head, ::]))
 			head_entropy.append(np.mean(test_layer_entropy3_all[head, ::]))
 
-		np.savetxt('model_res_vis_all/mean_entropy.txt', np.array(head_entropy).reshape(5,3))
-
+		np.savetxt(args.result_dir+'mean_entropy.txt', np.array(head_entropy).reshape(n_head,3)) ##### reshape to (n_head,n_layer)
 
 		###################### boxplot for each layer's entropy
 		seaborn.boxplot(data=np.mean(test_layer_entropy1_all, axis=1).T)
@@ -794,7 +884,6 @@ if __name__ == '__main__':
 		seaborn.boxplot(data=np.mean(test_layer_entropy3_all, axis=1).T)
 		seaborn.boxplot(data=np.hstack((np.mean(test_layer_entropy1_all, axis=1).T, np.mean(test_layer_entropy2_all, axis=1).T,
 							np.mean(test_layer_entropy3_all, axis=1).T)))
-
 
 		###get the average head out put and box plot
 		seaborn.boxplot(data=np.mean(head_output_1_test, axis=0))
@@ -805,146 +894,4 @@ if __name__ == '__main__':
 		############boxplot
 		seaborn.boxplot(data=np.vstack((np.mean(attn_1_test, axis=0), np.mean(attn_2_test, axis=0),
 										np.mean(attn_3_test, axis=0))))
-
-
-		#
-		# #################check the top 20 genes from entropy and head output
-		# # head=0
-		# for head in range(5):
-		# 	sorted_index_entropy = np.argsort(np.mean(test_layer_entropy1_all[head, :, :], axis=0))
-		# 	sorted_gene_entropy_top20 = np.array(gene_list)[sorted_index_entropy][0:20]
-		# 	sorted_index_headout = np.argsort(-np.mean(head_output_1_test[:, :, head], axis=0))
-		# 	sorted_gene_headout_top20 = np.array(gene_list)[sorted_index_headout][0:20]
-		# 	# sorted_index_V = np.argsort(-np.mean(np.array(V_seq_1)[head,:, :,], axis=0))
-		# 	# sorted_gene_V_top20 = np.array(gene_list)[sorted_index_V][0:20]
-		# 	f = open('model_res_vis_all/sorted gene via entropy and head output and V layer 1.txt', 'a')
-		# 	f.writelines('top 20 gene with least entropy head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_entropy_top20))
-		# 	f.write('\n')
-		# 	f.writelines('top 20 gene with most head output head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_headout_top20))
-		# 	f.write('\n')
-		#
-		# 	f.close()
-		#
-		# for head in range(5):
-		# 	sorted_index_entropy = np.argsort(np.mean(test_layer_entropy2_all[head, :, :], axis=0))
-		# 	sorted_gene_entropy_top20 = np.array(gene_list)[sorted_index_entropy][0:20]
-		# 	sorted_index_headout = np.argsort(-np.mean(head_output_2_test[:, :, head], axis=0))
-		# 	sorted_gene_headout_top20 = np.array(gene_list)[sorted_index_headout][0:20]
-		# 	# sorted_index_V = np.argsort(-np.mean(np.array(V_seq_2)[head,:, :,], axis=0))
-		# 	# sorted_gene_V_top20 = np.array(gene_list)[sorted_index_V][0:20]
-		# 	f = open('model_res_vis_all/sorted gene via entropy and head output and V layer 2.txt', 'a')
-		# 	f.writelines('top 20 gene with least entropy head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_entropy_top20))
-		# 	f.write('\n')
-		# 	f.writelines('top 20 gene with most head output head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_headout_top20))
-		# 	f.write('\n')
-		# 	# f.writelines('top 20 gene with most V head ' + str(head))
-		# 	# f.write('\n')
-		# 	# f.writelines(str(sorted_gene_V_top20))
-		# 	# f.write('\n')
-		# 	f.close()
-		#
-		# for head in range(5):
-		# 	sorted_index_entropy = np.argsort(np.mean(test_layer_entropy3_all[head, :, :], axis=0))
-		# 	sorted_gene_entropy_top20 = np.array(gene_list)[sorted_index_entropy][0:20]
-		# 	sorted_index_headout = np.argsort(-np.mean(head_output_3_test[:, :, head], axis=0))
-		# 	sorted_gene_headout_top20 = np.array(gene_list)[sorted_index_headout][0:20]
-		# 	# sorted_index_V = np.argsort(-np.mean(np.array(V_seq_3)[head,:, :,], axis=0))
-		# 	# sorted_gene_V_top20 = np.array(gene_list)[sorted_index_V][0:20]
-		# 	f = open('model_res_vis_all/sorted gene via entropy and head and V output layer 3.txt', 'a')
-		# 	f.writelines('top 20 gene with least entropy head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_entropy_top20))
-		# 	f.write('\n')
-		# 	f.writelines('top 20 gene with most head output head and V ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_headout_top20))
-		# 	f.write('\n')
-		# 	# f.writelines('top 20 gene with most V head ' + str(head))
-		# 	# f.write('\n')
-		# 	# f.writelines(str(sorted_gene_V_top20))
-		# 	# f.write('\n')
-		# 	f.close()
-
-		#
-		# ###get the average and abs head out put and box plot
-		# seaborn.boxplot(data=np.abs(np.mean(head_output_1_test, axis=0)))
-		# seaborn.boxplot(data=np.abs(np.mean(head_output_2_test, axis=0)))
-		# seaborn.boxplot(data=np.abs(np.mean(head_output_3_test, axis=0)))
-
-		#
-		# #################check the top 10 genes from entropy and head output
-		# # head=0
-		# for head in range(5):
-		# 	sorted_index_entropy = np.argsort(np.mean(test_layer_entropy1_all[head, :, :], axis=0))
-		# 	sorted_gene_entropy_top10 = np.array(gene_list)[sorted_index_entropy][0:10]
-		# 	sorted_index_headout = np.argsort(-np.abs(np.abs(np.mean(head_output_1_test[:, :, head], axis=0))))
-		# 	sorted_gene_headout_top10 = np.array(gene_list)[sorted_index_headout][0:10]
-		# 	# sorted_index_V = np.argsort(-np.mean(np.array(V_seq_1)[head,:, :,], axis=0))
-		# 	# sorted_gene_V_top10 = np.array(gene_list)[sorted_index_V][0:10]
-		# 	f = open('model_res_vis_all/sorted gene via entropy and head output abs layer 1.txt', 'a')
-		# 	f.writelines('top 10 gene with least entropy head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_entropy_top10))
-		# 	f.write('\n')
-		# 	f.writelines('top 10 gene with most head output head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_headout_top10))
-		# 	f.write('\n')
-		# 	# f.writelines('top 10 gene with most V head ' + str(head))
-		# 	# f.write('\n')
-		# 	# f.writelines(str(sorted_gene_V_top10))
-		# 	# f.write('\n')
-		# 	f.close()
-		#
-		# for head in range(5):
-		# 	sorted_index_entropy = np.argsort(np.mean(test_layer_entropy2_all[head, :, :], axis=0))
-		# 	sorted_gene_entropy_top10 = np.array(gene_list)[sorted_index_entropy][0:10]
-		# 	sorted_index_headout = np.argsort(-np.abs(np.mean(head_output_2_test[:, :, head], axis=0)))
-		# 	sorted_gene_headout_top10 = np.array(gene_list)[sorted_index_headout][0:10]
-		# 	# sorted_index_V = np.argsort(-np.mean(np.array(V_seq_2)[head,:, :,], axis=0))
-		# 	# sorted_gene_V_top10 = np.array(gene_list)[sorted_index_V][0:10]
-		# 	f = open('model_res_vis_all/sorted gene via entropy and head output abs layer 2.txt', 'a')
-		# 	f.writelines('top 10 gene with least entropy head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_entropy_top10))
-		# 	f.write('\n')
-		# 	f.writelines('top 10 gene with most head output head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_headout_top10))
-		# 	f.write('\n')
-		# 	# f.writelines('top 10 gene with most V head ' + str(head))
-		# 	# f.write('\n')
-		# 	# f.writelines(str(sorted_gene_V_top10))
-		# 	# f.write('\n')
-		# 	f.close()
-		#
-		# for head in range(5):
-		# 	sorted_index_entropy = np.argsort(np.mean(test_layer_entropy3_all[head, :, :], axis=0))
-		# 	sorted_gene_entropy_top10 = np.array(gene_list)[sorted_index_entropy][0:10]
-		# 	sorted_index_headout = np.argsort(-np.abs(np.mean(head_output_3_test[:, :, head], axis=0)))
-		# 	sorted_gene_headout_top10 = np.array(gene_list)[sorted_index_headout][0:10]
-		# 	# sorted_index_V = np.argsort(-np.mean(np.array(V_seq_3)[head,:, :,], axis=0))
-		# 	# sorted_gene_V_top10 = np.array(gene_list)[sorted_index_V][0:10]
-		# 	f = open('model_res_vis_all/sorted gene via entropy and  head output abs layer 3.txt', 'a')
-		# 	f.writelines('top 10 gene with least entropy head ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_entropy_top10))
-		# 	f.write('\n')
-		# 	f.writelines('top 10 gene with most head output head and V ' + str(head))
-		# 	f.write('\n')
-		# 	f.writelines(str(sorted_gene_headout_top10))
-		# 	f.write('\n')
-		# 	# f.writelines('top 10 gene with most V head ' + str(head))
-		# 	# f.write('\n')
-		# 	# f.writelines(str(sorted_gene_V_top10))
-		# 	# f.write('\n')
-		# 	f.close()
 
