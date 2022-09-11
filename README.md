@@ -47,11 +47,10 @@ Significant accrucay dropped means these genes are import to predict this type o
 
 ## 4. Compute and visulize the attention weights and entropy for each attention layers
 To discover the inner relationship at each layer, we can use attention weights and entropy of attention wieghts.  
-G-TEM_t_vis.py has two mode 'attn' and 'vis'. 'attn' is used for get the attn value for each layer
-> python G-TEM_t_vis.py attn
+G-TEM_t_vis.py has two mode 'attn' and 'vis'. 'attn' is used for get the attention weights for each layer.
+'vis' for visualizing. The output will be the average entropy for each heah at each layers and related boxplot. 
 
+> python G-TEM_t_vis.py --head_num 5 --learning_rate 0.0001 --act_fun leakyrelu --batch_size 16 --epoch 1 --dropout_rate 0.3 --result_dir model_res_vis_all/  --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model --task attn
 
-'vis' for visualizing the result from attn step
-> python G-TEM_t_vis.py vis 
+Notice, the model structure in G-TEM_t_vis.py has to match the structure at G-TEM_pytorch_3l_34.py. 
 
-The model for G-TEM_t_vis.py has to match the one trained at step 2
