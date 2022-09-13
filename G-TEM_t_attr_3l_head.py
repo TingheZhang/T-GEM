@@ -30,6 +30,7 @@ import inspect
 # import torch.utils.checkpoint as cp
 from torch.utils.checkpoint import checkpoint as cp
 from tqdm import tqdm
+import gc
 
 ###########change the number to your GPU ID
 ########### if you are using CPU， then delete this number
@@ -40,6 +41,9 @@ parser = argparse.ArgumentParser()
 # Required parameters
 parser.add_argument(
 	"--head_num", default=None, type=int, required=True, help="The number of head for each layers"
+)
+parser.add_argument(
+	"--cancer_type", default=None, type=int, required=True, help="Compute the attribution for which cancer, please check the table for exact cancer number"
 )
 
 
@@ -63,32 +67,11 @@ parser.add_argument(
 	type=str,
 	help="The activation function at the model top layer, can be chosen from relu, leakyrelu, or gelu. Otherwise use nan for no activation function",
 )
-parser.add_argument(
-	"--rand_seed",
-	default=52,
-	type=int,
-	help="random seed used to split train test and val ",
-)
-
-parser.add_argument(
-	"--batch_size",
-	default=16,
-	type=int,
-	help="batch size  ",
-)
-parser.add_argument(
-	"--epoch",
-	default=50,
-	type=int,
-	help="how many epoch will be used for training ",
-)
 
 parser.add_argument(
 	"--do_val", action="store_true", help="Whether split the val set from train set"
 )
-parser.add_argument(
-	"--attr_train", action="store_true", help="Whether compute attribution on train set"
-)
+
 parser.add_argument(
 	"--result_dir",
 	required=True,
@@ -109,15 +92,15 @@ args = parser.parse_args()
 print(sys.argv)
 d_ff = 1024
 dropout_rate = args.dropout_rate
-n_epochs = args.epoch
-batch_size = args.batch_size
+# n_epochs = args.epoch
+batch_size = 1
 n_layers=3
 n_head = args.head_num
 lr_rate = args.learning_rate
 act_fun = args.act_fun
 gain = 1
-include_train=args.attr_train
-rand_state = args.rand_seed
+
+rand_state = 52
 n_gene = 1708
 n_feature = 1708
 # n_class=0
@@ -146,21 +129,6 @@ class mulitiattention_out(torch.nn.Module):
         self.query_gene = query_gene
         self.WV = V
         self.W_0 = W0
-        # self.WQ = nn.Parameter(torch.Tensor(self.n_head, n_feature, 1), requires_grad=True)
-        # self.WK = nn.Parameter(torch.Tensor(self.n_head,n_feature,1),requires_grad=True)
-        # self.WV = nn.Parameter(torch.Tensor(self.n_head,n_feature,1),requires_grad=True)
-        # # torch.nn.init.xavier_uniform_(self.WK,gain=50)
-        # # torch.nn.init.xavier_uniform_(self.WV,gain=50)
-        # # torch.nn.init.xavier_normal_(self.WK,gain=25)
-        # # torch.nn.init.xavier_normal_(self.WV,gain=25)
-        # torch.nn.init.xavier_normal_(self.WQ,gain=gain)
-        # torch.nn.init.xavier_normal_(self.WK,gain=gain)
-        # # torch.nn.init.xavier_normal_(self.WQ,gain=0)
-        # # torch.nn.init.xavier_normal_(self.WK,gain=0)
-        # torch.nn.init.xavier_normal_(self.WV)
-        # seaborn.violinplot(x=self.WK.cpu().data.numpy())
-        # seaborn.violinplot(x=self.WV.cpu().data.numpy())
-        self.W_0 = W0
 
         print('init')
 
@@ -168,9 +136,7 @@ class mulitiattention_out(torch.nn.Module):
 
     def QK_diff(self, Q_seq, K_seq):
         QK_dif = -1 * torch.pow((Q_seq - K_seq), 2)
-        # QK_dif = -1 * (Q_seq - K_seq) * (Q_seq - K_seq)
-        # QK_dif = -1 * ((Q_seq - K_seq)**2)
-        # QK_dif.cpu().data.numpy()
+
         return torch.nn.Softmax(dim=2)(QK_dif)
 
     def mask_softmax_self(self, x):
@@ -228,17 +194,12 @@ class mulitiattention(torch.nn.Module):
         self.WQ = nn.Parameter(torch.Tensor(self.n_head, n_feature, 1), requires_grad=True)
         self.WK = nn.Parameter(torch.Tensor(self.n_head, n_feature, 1), requires_grad=True)
         self.WV = nn.Parameter(torch.Tensor(self.n_head, n_feature, 1), requires_grad=True)
-        # torch.nn.init.xavier_uniform_(self.WK,gain=50)
-        # torch.nn.init.xavier_uniform_(self.WV,gain=50)
-        # torch.nn.init.xavier_normal_(self.WK,gain=25)
-        # torch.nn.init.xavier_normal_(self.WV,gain=25)
+
         torch.nn.init.xavier_normal_(self.WQ, gain=gain)
         torch.nn.init.xavier_normal_(self.WK, gain=gain)
-        # torch.nn.init.xavier_normal_(self.WQ,gain=0)
-        # torch.nn.init.xavier_normal_(self.WK,gain=0)
+
         torch.nn.init.xavier_normal_(self.WV)
-        # seaborn.violinplot(x=self.WK.cpu().data.numpy())
-        # seaborn.violinplot(x=self.WV.cpu().data.numpy())
+
         self.W_0 = nn.Parameter(torch.Tensor(self.n_head * [0.001]), requires_grad=True)
 
         print('init')
@@ -425,46 +386,6 @@ class MyNet(torch.nn.Module):
         # print(y_pred.detach().numpy())
         return y_pred
 
-
-def get_percent_acc(attr_sort_index, xx, yy, percent_to_be_0):
-    acc = []
-    # X_train_input[:,attr_sort_index[0:int(len(attr_sort_index)*percent)]]
-    # X_test_input_percent=torch.from_numpy(np.vstack(X_test)[:, attr_sort_index[0:int(len(attr_sort_index) * percent)]])
-    # X_test_input_percent = np.vstack(X_test)
-    X_test_input_percent = copy.deepcopy(xx)
-    X_test_input_percent[:, attr_sort_index[0:int(len(attr_sort_index) * percent_to_be_0)]] = 0
-    X_test_input_percent_tensor = torch.from_numpy(X_test_input_percent).to(device)
-    model.eval()
-    permutation_test = torch.randperm(X_test_input_percent_tensor.size()[0])
-    test_loss = 0
-    correct = 0
-    with torch.no_grad():
-        for batch_idx, i in enumerate(range(0, X_test_input_percent_tensor.size()[0], batch_size)):
-            indices = permutation_test[i:i + batch_size]
-            # batch_x_test, batch_y_test = X_test_input_percent_tensor[indices], y_test_input[indices]
-            batch_x_test, batch_y_test = X_test_input_percent_tensor[indices], torch.from_numpy(yy)[
-                indices]
-            batch_x_test, batch_y_test = batch_x_test.to(device), batch_y_test.to(device)
-            output_test = model(batch_x_test.float())
-
-            # X_var = Variable(batch_x_test.float(), requires_grad=True)
-            # y_pred = model(X_var)
-            # y_pred = y_pred.gather(1, batch_y_test.view(-1, 1)).squeeze()
-            # y_pred.backward(torch.FloatTensor([1.0] * batch_y_test.shape[0]).to(device))
-
-            test_loss += F.nll_loss(output_test, batch_y_test, reduction='sum')
-            # test_loss=criterion(output_test, batch_y_test.float())
-            # test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
-            pred = output_test.argmax(dim=1, keepdim=True)
-            # batch_y_class=batch_y_test.argmax(dim=1, keepdim=True)# get the index of the max log-probability
-            # correct += pred.eq(batch_y_class.view_as(pred)).sum().item()
-            correct += pred.eq(batch_y_test.view_as(pred)).sum().item()
-
-    test_loss /= len(X_test_input)
-    acc.append(correct / len(X_test_input_percent_tensor))
-    return acc
-
-
 if __name__ == '__main__':
 
     y, data_df, pathway_gene, pathway, cancer_name = pl.load(open('./pathway_data.pckl', 'rb'))
@@ -574,14 +495,34 @@ if __name__ == '__main__':
 
     # try
     # IG
-    cancer_type = 0
-    # attr_method == 'ig'
+    cancer_type = args.cancer_type
     from captum.attr import LayerConductance, LayerIntegratedGradients
-
     torch.manual_seed(123)
     np.random.seed(123)
     model.eval()
     model = model.to(device)
+
+    # attributions_list_mean_all = []
+    # lig = eval(
+    #     'LayerIntegratedGradients(model,model.mulitiattention' + str(args.layer) + ',multiply_by_inputs=True)')
+    # permutation = torch.randperm(torch.from_numpy(X_test[cancer_type]).size()[0])
+    # # torch.cuda.empty_cache()
+    # n_correct, n_total = 0, 0
+    # attributions_list = []
+    # for batch_idx, i in enumerate(tqdm(range(0, torch.from_numpy(X_test[cancer_type]).size()[0], 1))):
+    #     indices = permutation[i:i + 1]
+    #     batch_x, batch_y = torch.from_numpy(X_test[cancer_type])[indices], \
+    #                        torch.from_numpy(y_test[cancer_type])[indices]
+    #     batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+    #     attributions, approximation_error = lig.attribute(batch_x, target=batch_y,
+    #                                                       return_convergence_delta=True, baselines=0)
+    #
+    #     attributions_list.append(attributions.detach().cpu().numpy())
+    #
+    # attributions_list_mean_all.append(np.mean(attributions_list, axis=0))
+    # if not os.path.exists(args.result_dir):
+    #     os.makedirs(args.result_dir, exist_ok=True)
+    # plk.dump(attributions_list_mean_all, open(args.result_dir+'/attr_softmax_layer'+str(args.layer)+'.plk', 'wb'))
 
     attributions_list_mean_all = []
     for layer in range(n_layers):
@@ -601,7 +542,7 @@ if __name__ == '__main__':
                                                               return_convergence_delta=True, baselines=0)
 
             attributions_list.append(attributions.detach().cpu().numpy())
-        ####### if I put two layers there the attributions will become two list of attribtuions
-        attributions_list_mean = np.mean(attributions_list, axis=0)
-        attributions_list_mean_all.append(attributions_list_mean)
-    plk.dump(attributions_list_mean_all, open(args.result_dir+'attr_softmax_alllayer.plk', 'wb'))
+
+        attributions_list_mean_all.append(np.mean(attributions_list, axis=0))
+        # torch.cuda.empty_cache()
+    plk.dump(attributions_list_mean_all, open(args.result_dir+'/attr_softmax_alllayer_'+str(cancer_type)+'.plk', 'wb'))
