@@ -56,4 +56,8 @@ Notice, the model structure in G-TEM_t_vis.py has to match the structure at G-TE
 To obtain the hub genes, first we should compute the attribution of attention weights for each head at each layers 
 > python G-TEM_t_attr_3l_head.py --head_num 5 --cancer_type 0 --act_fun leakyrelu --result_dir model_res_vis_all/  --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model
 
-After obtaining these attribution scores,
+After obtaining these attribution scores, we can generate the coresponsding net
+>python3 get_net.py --head_num 5 --cancer_type 0 --result_dir model_res_vis_all/ --net_dir gene_net/ --threshold 0.001
+
+
+The output are txt files which contain the Query gene and Key gene pairs. To create the net, these files should be feed into [Cytoscape](https://cytoscape.org/). 
