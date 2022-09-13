@@ -43,8 +43,6 @@ The input gene importance can be also analyzed by aliblition study. We removed t
 Significant accrucay dropped means these genes are import to predict this type of cancers. 
 
 
-
-
 ## 4. Compute and visulize the attention weights and entropy for each attention layers
 To discover the inner relationship at each layer, we can use attention weights and entropy of attention wieghts.  
 G-TEM_t_vis.py has two mode 'attn' and 'vis'. 'attn' is used for get the attention weights for each layer.
@@ -54,3 +52,6 @@ G-TEM_t_vis.py has two mode 'attn' and 'vis'. 'attn' is used for get the attenti
 
 Notice, the model structure in G-TEM_t_vis.py has to match the structure at G-TEM_pytorch_3l_34.py. 
 
+## 5. Compute the attributation of attention weights for each layer
+To obtain the hub genes, first we should compute the attribution of attention weights for each head at each layers 
+> python G-TEM_t_attr_3l_head.py --head_num 5 --learning_rate 0.0001 --act_fun leakyrelu --batch_size 16 --epoch 1 --dropout_rate 0.3 --result_dir model_res_vis_all/  --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model
