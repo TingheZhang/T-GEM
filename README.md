@@ -54,4 +54,6 @@ Notice, the model structure in G-TEM_t_vis.py has to match the structure at G-TE
 
 ## 5. Compute the attributation of attention weights for each layer
 To obtain the hub genes, first we should compute the attribution of attention weights for each head at each layers 
-> python G-TEM_t_attr_3l_head.py --head_num 5 --learning_rate 0.0001 --act_fun leakyrelu --batch_size 16 --epoch 1 --dropout_rate 0.3 --result_dir model_res_vis_all/  --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model
+> python G-TEM_t_attr_3l_head.py --head_num 5 --cancer_type 0 --act_fun leakyrelu --result_dir model_res_vis_all/  --model_location model/3l/pytorch_transformer_head_5_lr_0.0001_leakyrelu_epoch0.model
+
+After obtaining these attribution scores,
