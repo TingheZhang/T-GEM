@@ -4,7 +4,9 @@ This repository includes the implementation of 'Transformer for Gene Expression 
 Please cite our paper if you use the models or codes. The repo is still actively under development, so please kindly report if there is any issue encountered.
 
 ## Citation
-Ting-He Zhang, Md Musaddaqui Hasib, Yu-Chiao Chiu, et al. ransformer for Gene Expression Modeling (T-GEM): An interpretable deep learning model for gene expression-based phenotype predictions. 
+Ting-He Zhang, Md Musaddaqui Hasib, Yu-Chiao Chiu, et al. "Transformer for Gene Expression Modeling (T-GEM): An Interpretable Deep Learning Model for Gene Expression-Based Phenotype Predictions." Cancers 14.19 (2022): 4763. 
+
+[Paper](https://www.mdpi.com/2072-6694/14/19/4763)
 
 ## 1. Environment setup 
 [Conda](https://docs.anaconda.com/anaconda/install/linux/) is recommanded to set up the enviroment. 
