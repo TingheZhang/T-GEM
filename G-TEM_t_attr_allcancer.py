@@ -537,7 +537,7 @@ if __name__ == '__main__':
 			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_input[cancer_type]).size()[0], 1)):
 				indices = permutation[i:i + 1]
 				batch_x, batch_y = torch.from_numpy(X_input[cancer_type])[indices], \
-								   torch.from_numpy(X_input[cancer_type])[indices]
+								   torch.from_numpy(y_input[cancer_type])[indices]
 				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 				attributions, approximation_error = ig.attribute(batch_x, target=batch_y,
 																 return_convergence_delta=True, baselines=0)
@@ -559,7 +559,7 @@ if __name__ == '__main__':
 			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_input[0]).size()[0], 1)):
 				indices = permutation[i:i + 1]
 				batch_x, batch_y = torch.from_numpy(X_input[0])[indices], \
-								   torch.from_numpy(X_input[0])[indices]
+								   torch.from_numpy(y_input[0])[indices]
 				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 				attributions = nt.attribute(batch_x, target=batch_y, nt_type='smoothgrad_sq', baselines=0,
 											stdevs=0.1)
@@ -580,7 +580,7 @@ if __name__ == '__main__':
 			attributions_list = []
 			for batch_idx, i in enumerate(range(0, torch.from_numpy(X_input[0]).size()[0], 1)):
 				indices = permutation[i:i + 1]
-				batch_x, batch_y = torch.from_numpy(X_input[0])[indices], torch.from_numpy(y_test[0])[indices]
+				batch_x, batch_y = torch.from_numpy(X_input[0])[indices], torch.from_numpy(y_input[0])[indices]
 				batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 				attributions = nt.attribute(batch_x, target=batch_y, nt_type='vargrad', baselines=0, stdevs=0.1)
 				attributions_list.append(attributions)
