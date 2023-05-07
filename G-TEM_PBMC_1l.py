@@ -446,9 +446,7 @@ if __name__ == '__main__':
         auc_res.append(roc_auc)
         f1_res.append(f1)
 
-        # torch.save(model, './pytorch_transformer_head' + str(n_head) + '_10label_zscore_1l_product_epoch'+str(epoch)+'_.model')
-        torch.save(model, './model/1l/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_gain_' + str(
-            gain) + '_34label_zscore_1l_product_' + str(act_fun) + '_epoch' + str(epoch) + '.model')
+        torch.save(model, args.model_dir+ '/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_' + str(act_fun) +'_epoch'+str(epoch)+'.model')
     res['confusion_matrix'] = confusion_matrix_res
     res['mcc'] = mcc_res
     res['f1'] = f1_res
