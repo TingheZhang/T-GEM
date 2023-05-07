@@ -457,14 +457,9 @@ if __name__ == '__main__':
     res['acc'] = acc_res
     res['auc'] = auc_res
 
-    # torch.save(model,'./model/1l/pytorch_transformer_head_'+str(n_head)+'_lr_'+str(lr_rate)+'_gain_'+str(gain)+'_34label_zscore_1l_product_'+str(act_fun)+'.model')
-    pl.dump(res, open('./model_res/1l/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_gain_' + str(
-        gain) + '_34label_zscore_1l_product_' + str(act_fun) + '.dat', 'wb'))
-    plt.plot(train_loss_list, label='train loss')
-    plt.plot(val_loss_list, label='val loss')
+    pl.dump(res, open(args.result_dir+'/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_' + str(act_fun) +'.dat', 'wb'))
+    plt.plot(train_loss_list,label='train loss')
+    plt.plot(val_loss_list,label='val loss')
     plt.legend()
-    # plt.show()
-    plt.savefig(
-        'model_res/1l/pytorch_transformer_head_' + str(n_head) + '_lr_' + str(lr_rate) + '_gain_' + str(
-            gain) + '_34label_zscore_1l_product_' + str(act_fun) + '.png', format='png')
+    plt.savefig(args.result_dir+'/model_figure/pytorch_transformer_head_'+str(n_head)+'_lr_' + str(lr_rate) + '_' + str(act_fun) +'.png',format='png')
     plt.close()
