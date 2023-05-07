@@ -27,6 +27,8 @@ G-TEM_pytorch_3l_34.py is the model that has the best performance for our cancer
 The code attached used 3 attention layers. If you want to increase or decrease the number of layers, you can change the structure at line 252~ line 255 and line 271~ line 286. 
 
 Our input file can be downloaded from [here](https://drive.google.com/file/d/13-Xjqexsi8-ZkZm17vcH6oGIivL2O8XW/view?usp=sharing)
+PBMC data and label can be found from [here] (https://drive.google.com/file/d/158PAzib3Nq17UMtLMIJwndlX7hqcLaZT/view?usp=sharing, https://drive.google.com/file/d/1gNLyp7b720MFnvQtVLDaXHScIhnPdpR9/view?usp=sharing)
+
 ## 3. Compute the attribution score and give the gene importance rank 
 To evaluate which gene is more important to predicte specific cancer, we use integer gradient(IG) to compute the attribution score for each test samples. The larger score means more importance. 
 To compute the attribution score, it can be easily got by:
