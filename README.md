@@ -28,8 +28,6 @@ The code attached used 3 attention layers. If you want to increase or decrease t
 
 Our input file can be downloaded from [here](https://utsacloud-my.sharepoint.com/:f:/g/personal/tinghe_zhang_utsa_edu/Emc5CjMevt5FkZQ8aLI-UpgBCftwQkj_4U0GXbmtmswF1g?e=FtLbOR) 
 
-PBMC data and label can be found from [here](https://drive.google.com/file/d/158PAzib3Nq17UMtLMIJwndlX7hqcLaZT/view?usp=sharing), [here](https://drive.google.com/file/d/1gNLyp7b720MFnvQtVLDaXHScIhnPdpR9/view?usp=sharing)
-
 ## 3. Compute the attribution score and give the gene importance rank 
 To evaluate which gene is more important to predicte specific cancer, we use integer gradient(IG) to compute the attribution score for each test samples. The larger score means more importance. 
 To compute the attribution score, it can be easily got by:
